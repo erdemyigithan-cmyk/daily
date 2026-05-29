@@ -579,6 +579,44 @@
   let draft = 0; // numpad taslagi (tam sayi TL)
   let selectedDate = todayStr();
 
+  // Hero sayisi count-up. Onceki degerden hedefe; prefers-reduced-motion'da aninda.
+  let lastHeroValue = null;
+  function animateHero(target) {
+    const el = document.querySelector('.hero-amount');
+    if (!el) return;
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const from = (lastHeroValue == null) ? 0 : lastHeroValue;
+    lastHeroValue = target;
+    if (reduce || from === target) { el.textContent = formatTL(target); return; }
+    const dur = 500, t0 = performance.now();
+    const ease = (x) => 1 - Math.pow(1 - x, 3); // ease-out cubic
+    el.textContent = formatTL(from);
+    function frame(t) {
+      const p = Math.min((t - t0) / dur, 1);
+      el.textContent = formatTL(from + (target - from) * ease(p));
+      if (p < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // Hero altindaki streak gostergesi (yalniz bugun gorunumu).
+  function streakHtml(s) {
+    if (!s) return '';
+    const best = s.best > s.current ? `<span class="streak-best">· rekor ${s.best}</span>` : '';
+    let cls = 'streak';
+    let text;
+    if (s.current === 0 && !s.riskToday) {
+      text = 'Seriye başla — bugünkü harcamanı gir 🔥';
+    } else if (s.riskToday) {
+      cls += ' risk';
+      text = `🔥 ${s.current} günlük seri sürüyor · bugün girersen kaçırmazsın`;
+    } else {
+      if (s.todayClean) cls += ' clean';
+      text = `🔥 ${s.current} gündür takipte`;
+    }
+    return `<p class="${cls}">${text} ${best}</p>`;
+  }
+
   function renderMain(dateStr) {
     draft = 0;
     selectedDate = clampViewDate(dateStr || selectedDate);
@@ -590,6 +628,9 @@
     const dayTotal = dayExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
     const heroClass = viewingToday ? (over ? 'over' : '') : 'history';
+    const streak = viewingToday
+      ? Streak.compute(state.expenses, { now: new Date(), todaySpendable: r.spendableToday })
+      : null;
 
     app.innerHTML = `
       <header class="head">
@@ -616,6 +657,8 @@
         <p class="hero-amount">${formatTL(viewingToday ? r.spendableToday : dayTotal)}</p>
         <p class="hero-sub">${viewingToday ? `${r.daysRemaining} gün kaldı · bugün dahil` : `${dayExpenses.length} işlem · ${weekdayName(selectedDate)}`}</p>
       </section>
+
+      ${streakHtml(streak)}
 
       <section class="balance ${r.cumulativeBalance < 0 ? 'neg' : 'pos'}">
         <span>Kümülatif bakiye</span>
@@ -649,6 +692,16 @@
             </div>`).join('')}
       </section>
     `;
+
+    if (viewingToday) {
+      animateHero(r.spendableToday);
+      if (streak && streak.todayClean) {
+        const heroEl = app.querySelector('.hero');
+        if (heroEl) { heroEl.classList.remove('clean-pulse'); void heroEl.offsetWidth; heroEl.classList.add('clean-pulse'); }
+      }
+    } else {
+      lastHeroValue = null; // gecmis gun statik gosterilir
+    }
 
     document.getElementById('settingsBtn').addEventListener('click', openSettingsSheet);
     document.getElementById('statsBtn').addEventListener('click', renderStats);

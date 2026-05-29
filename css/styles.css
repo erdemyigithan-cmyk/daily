@@ -444,10 +444,34 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   font-size: 52px; font-weight: 800; line-height: 1.05;
   color: var(--accent);
   letter-spacing: -1px;
+  transition: color 0.4s ease; /* yesil <-> turuncu yumusak gecis */
 }
 .hero.over .hero-amount { color: var(--danger); }
 .hero.history .hero-amount { color: var(--text); }
 .hero-sub { color: var(--muted); font-size: 13px; margin-top: 10px; }
+
+/* Temiz gun: kisa yesil parlama */
+@keyframes cleanPulse {
+  0%   { box-shadow: 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  40%  { box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 45%, transparent); }
+  100% { box-shadow: 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+.hero.clean-pulse { animation: cleanPulse 1.2s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .hero.clean-pulse { animation: none; }
+  .hero-amount { transition: none; }
+}
+
+/* Streak gostergesi */
+.streak {
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+  margin: -6px 0 16px;
+}
+.streak.clean { color: var(--accent); font-weight: 600; }
+.streak.risk { color: var(--text); }
+.streak-best { color: var(--muted); font-size: 12px; }
 
 .balance {
   display: flex; align-items: center; justify-content: space-between;

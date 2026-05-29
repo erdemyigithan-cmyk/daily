@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>streak.js testleri</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; background:#10211c; color:#f1f5f3; padding:20px; }
+    h1 { font-size:18px; }
+    .summary { font-size:16px; margin:12px 0; padding:10px 14px; border-radius:10px; }
+    .summary.ok { background:#14391f; color:#22c55e; }
+    .summary.bad { background:#3a1414; color:#ef4444; }
+    .test { margin:10px 0; padding:10px 14px; border-radius:10px; background:#18241f; }
+    .test.ok { border-left:4px solid #22c55e; }
+    .test.bad { border-left:4px solid #ef4444; }
+    .name { font-weight:600; margin-bottom:6px; }
+    .check { font-size:13px; color:#8aa39a; }
+    .check.pass::before { content:'✓ '; color:#22c55e; }
+    .check.failx::before { content:'✗ '; color:#ef4444; }
+  </style>
+</head>
+<body>
+  <h1>streak.js testleri</h1>
+  <div id="out"></div>
+
+  <script src="../js/streak.js"></script>
+  <script src="streak.tests.js"></script>
+  <script>
+    const { pass, fail, results } = StreakTests.runAll(Streak);
+    const out = document.getElementById('out');
+    const sum = document.createElement('div');
+    sum.className = 'summary ' + (fail === 0 ? 'ok' : 'bad');
+    sum.textContent = (fail === 0 ? 'TÜMÜ GEÇTİ' : 'BAŞARISIZ') + ` — ${pass} geçti, ${fail} kaldı`;
+    out.appendChild(sum);
+    for (const r of results) {
+      const d = document.createElement('div');
+      d.className = 'test ' + (r.ok ? 'ok' : 'bad');
+      let html = `<div class="name">${r.name}</div>`;
+      for (const [label, ok] of r.checks) {
+        html += `<div class="check ${ok ? 'pass' : 'failx'}">${label}</div>`;
+      }
+      d.innerHTML = html;
+      out.appendChild(d);
+    }
+  </script>
+</body>
+</html>

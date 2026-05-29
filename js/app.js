@@ -483,6 +483,10 @@
   function chooseEffectiveMonth(startPeriod, curPeriod) {
     return new Promise((resolve) => {
       const def = curPeriod.slice(0, 7);
+      // Gelecek 12 aya kadar secilebilir (ileride gecerli olacak zam vb.)
+      const curD = new Date(curPeriod + 'T00:00:00');
+      const maxD = new Date(curD.getFullYear(), curD.getMonth() + 12, 1);
+      const maxM = maxD.getFullYear() + '-' + String(maxD.getMonth() + 1).padStart(2, '0');
       const overlay = document.createElement('div');
       overlay.className = 'sheet-overlay';
       overlay.innerHTML = `
@@ -490,8 +494,8 @@
           <div class="sheet-handle"></div>
           <div class="eff-sheet">
             <strong>Değişiklik hangi aydan itibaren geçerli?</strong>
-            <p class="plan-hint">Seçtiğin aydan önceki dönemler eski değerlerle kalır.</p>
-            <input id="effMonth" type="month" value="${def}" min="${startPeriod.slice(0, 7)}" max="${def}">
+            <p class="plan-hint">Geçmiş bir ay (geç giriş) ya da gelecek bir ay (ör. zam Haziran'da başlayacak) seçebilirsin. Seçtiğin aydan önceki dönemler eski değerlerle kalır.</p>
+            <input id="effMonth" type="month" value="${def}" min="${startPeriod.slice(0, 7)}" max="${maxM}">
             <div class="edit-btns">
               <button type="button" class="edit-save" id="effOk">Uygula</button>
               <button type="button" class="edit-cancel" id="effCancel">İptal</button>

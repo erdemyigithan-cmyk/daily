@@ -80,7 +80,9 @@
     return tx('fixedExpenses', 'readwrite', s => {
       s.clear();
       for (const item of list) {
-        s.add({ name: item.name, amount: Number(item.amount) || 0 });
+        const rec = { name: item.name, amount: Number(item.amount) || 0 };
+        if (item.variable) rec.variable = true; // tutari her ay degisebilen kalem
+        s.add(rec);
       }
     });
   }

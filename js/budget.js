@@ -163,6 +163,16 @@
     return total;
   }
 
+  // Sabit gider denkleştirme farki: o donem icin (gerceklesen - tahmin).
+  // settings.reconcile = { 'YYYY-MM': { diff } }. Pozitif diff = fazla harcandi (bakiye duser).
+  function reconcileDiff(settings, periodStart) {
+    const rec = settings && settings.reconcile;
+    if (!rec) return 0;
+    const key = periodStart.getFullYear() + '-' + String(periodStart.getMonth() + 1).padStart(2, '0');
+    const e = rec[key];
+    return (e && typeof e.diff === 'number') ? e.diff : 0;
+  }
+
   // Bir donemin tahakkuk eden tam butcesi. Donem ortasinda baslandiysa (accrualStart
   // > periodStart) butce orantili (prorated) olur; aksi halde tam V'dir.
   function periodBudget(V, periodStart, periodEnd, accrualStart) {
@@ -198,7 +208,9 @@
       const pEnd = nextPeriodStart(p, salaryDay);
       const aStart = maxDate(p, startDate);
       const periodV = variableBudgetForPeriod(settings, fixedExpenses, p);
-      rolloverIn += periodBudget(periodV, p, pEnd, aStart) - sumExpensesInRange(expenses, aStart, pEnd);
+      rolloverIn += periodBudget(periodV, p, pEnd, aStart)
+        - sumExpensesInRange(expenses, aStart, pEnd)
+        - reconcileDiff(settings, p); // sabit gider gerceklesen-tahmin farki
       p = pEnd;
     }
 

@@ -143,6 +143,7 @@
 
         <div class="field">
           <span>Sabit giderler</span>
+          <small class="hint">Tutarı her ay değişen kalemleri ≈ ile işaretle (elektrik, su, doğalgaz). Tahmin için ~1 yıl ortalamasını baz al; ay sonunda gerçekleşenle denkleştirilir.</small>
           <div id="fixedList"></div>
           <div class="fixed-actions">
             <button type="button" id="addFixed" class="btn-ghost">+ Boş satır ekle</button>
@@ -184,7 +185,7 @@
 
     const fixedList = document.getElementById('fixedList');
     if (fixed.length === 0) addFixedRow(fixedList);
-    else fixed.forEach(f => addFixedRow(fixedList, f.name, f.amount));
+    else fixed.forEach(f => addFixedRow(fixedList, f.name, f.amount, f.variable));
 
     applyNumFmt(document.getElementById('savings'));
 
@@ -230,7 +231,7 @@
       }
       STARTER_TEMPLATE
         .filter(name => !existing.has(name.toLowerCase()))
-        .forEach(name => addFixedRow(fixedList, name));
+        .forEach(name => addFixedRow(fixedList, name, undefined, VARIABLE_HINTS.includes(name)));
       fixedList.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
     setupForm.addEventListener('submit', onSaveSetup);
@@ -389,6 +390,7 @@
     const rowName = choice ? (choice.label === 'Aylik' ? name : `${name} - ${choice.label}`) : name;
     const rowAmount = choice ? choice.amount : undefined;
 
+    const isVar = VARIABLE_HINTS.includes(name);
     const rows = [...container.querySelectorAll('.fixed-row')];
     let row = rows.find(r =>
       r.querySelector('.fx-name').value.trim() === '' &&
@@ -396,8 +398,9 @@
     if (row) {
       row.querySelector('.fx-name').value = rowName;
       if (rowAmount > 0) row.querySelector('.fx-amount').value = tlFmt.format(rowAmount);
+      row.querySelector('.fx-var').classList.toggle('on', isVar);
     } else {
-      row = addFixedRow(container, rowName, rowAmount);
+      row = addFixedRow(container, rowName, rowAmount, isVar);
     }
     const amt = row.querySelector('.fx-amount');
     amt.focus();
@@ -455,14 +458,19 @@
     });
   }
 
-  function addFixedRow(container, name, amount) {
+  // Tutari her ay degisen tipik kalemler (preset/sablonda ≈ varsayilan acik)
+  const VARIABLE_HINTS = ['Elektrik', 'Su', 'Doğal gaz', 'Isıtma', 'Yakıt'];
+
+  function addFixedRow(container, name, amount, variable) {
     const row = document.createElement('div');
     row.className = 'fixed-row';
     row.innerHTML = `
       <input class="fx-name" type="text" placeholder="İsim (ör. Kira)" value="${name != null ? escapeAttr(name) : ''}">
       <input class="fx-amount" type="text" inputmode="numeric" placeholder="0" value="${amount > 0 ? tlFmt.format(amount) : (amount === 0 ? '' : '')}">
+      <button type="button" class="fx-var ${variable ? 'on' : ''}" aria-label="Değişken tutar" title="Tutarı her ay değişir (ay sonunda denkleştirilir)">≈</button>
       <button type="button" class="fx-del" aria-label="Sil">×</button>
     `;
+    row.querySelector('.fx-var').addEventListener('click', (e) => e.currentTarget.classList.toggle('on'));
     row.querySelector('.fx-del').addEventListener('click', () => row.remove());
     applyNumFmt(row.querySelector('.fx-amount'));
     container.appendChild(row);
@@ -474,7 +482,8 @@
     return rows
       .map(r => ({
         name: r.querySelector('.fx-name').value.trim(),
-        amount: parseAmount(r.querySelector('.fx-amount').value)
+        amount: parseAmount(r.querySelector('.fx-amount').value),
+        variable: r.querySelector('.fx-var').classList.contains('on')
       }))
       .filter(f => f.name !== '' || f.amount > 0);
   }
@@ -730,6 +739,7 @@
     const streak = viewingToday ? computeStreakWithFreeze(r.spendableToday) : null;
     const meal = viewingToday ? mealCardInfo() : null;
     const inst = viewingToday ? installmentSummary() : null;
+    const recon = viewingToday ? pendingReconcile() : null;
 
     app.innerHTML = `
       <header class="head">
@@ -755,6 +765,8 @@
       </section>
 
       ${streakHtml(streak)}
+
+      ${recon ? `<button type="button" id="reconBtn" class="recon-banner">📊 ${recon.label} kapandı — sabitleri denkleştir</button>` : ''}
 
       <section class="balance ${r.cumulativeBalance < 0 ? 'neg' : 'pos'}">
         <span>Kümülatif bakiye</span>
@@ -824,6 +836,8 @@
     }
 
     document.getElementById('settingsBtn').addEventListener('click', openSettingsSheet);
+    const reconBtn = document.getElementById('reconBtn');
+    if (reconBtn) reconBtn.addEventListener('click', () => openReconcileSheet(recon));
     wireTabBar();
     document.getElementById('prevDay').addEventListener('click', () => renderMain(addDays(selectedDate, -1)));
     document.getElementById('nextDay').addEventListener('click', () => renderMain(addDays(selectedDate, 1)));
@@ -955,6 +969,80 @@
     const upcoming = inst.filter(e => +new Date(e.ts) >= nextMonthStart);
     if (thisMonth === 0 && upcoming.length === 0) return null;
     return { thisMonth, upcomingCount: upcoming.length, upcomingTotal: sum(upcoming) };
+  }
+
+  // Denkleştirme bekleyen en eski kapanmış dönem (değişken kalemi olan, henüz yapılmamış).
+  function pendingReconcile() {
+    const s = state.settings;
+    if (!s) return null;
+    const startKey = (s.startDate || todayStr()).slice(0, 7);
+    const now = new Date();
+    const curKey = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const rec = s.reconcile || {};
+    let [y, m] = startKey.split('-').map(Number);
+    for (let i = 0; i < 120; i++) { // güvenlik sınırı
+      const key = y + '-' + String(m).padStart(2, '0');
+      if (key >= curKey) break; // yalnız kapanmış dönemler
+      if (!rec[key]) {
+        const pDate = new Date(y, m - 1, 1);
+        const cfg = Budget.configForPeriod(s, pDate);
+        const fixedList = cfg ? (cfg.fixed || []) : (state.fixed || []);
+        const items = fixedList.filter(f => f.variable);
+        if (items.length) {
+          return { key, label: pDate.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }), items };
+        }
+      }
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    return null;
+  }
+
+  // Denkleştirme sheet'i: değişken kalemlerin gerçekleşenini al, farkı kaydet.
+  function openReconcileSheet(recon) {
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+    overlay.innerHTML = `
+      <div class="sheet" role="dialog" aria-modal="true">
+        <div class="sheet-handle"></div>
+        <div class="recon-sheet">
+          <strong>${recon.label} — sabit gider denkleştirme</strong>
+          <p class="plan-hint">Gerçekleşen tutarları gir. Fark (gerçek − tahmin) devreden bakiyene işlenir.</p>
+          <div class="recon-rows">
+            ${recon.items.map((it, i) => `
+              <div class="recon-row">
+                <span>${escapeAttr(it.name)}</span>
+                <input class="recon-act" data-est="${Number(it.amount) || 0}" type="text" inputmode="numeric" value="${it.amount > 0 ? tlFmt.format(it.amount) : ''}">
+              </div>`).join('')}
+          </div>
+          <p class="recon-diff" id="reconDiff">Fark: 0 TL</p>
+          <div class="edit-btns">
+            <button type="button" class="edit-save" id="reconSave">Kaydet</button>
+            <button type="button" class="edit-cancel" id="reconSkip">Tahmin doğruydu</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const acts = [...overlay.querySelectorAll('.recon-act')];
+    acts.forEach(applyNumFmt);
+    const diffEl = overlay.querySelector('#reconDiff');
+    const calcDiff = () => acts.reduce((d, inp) => d + (parseAmount(inp.value) - (Number(inp.dataset.est) || 0)), 0);
+    const update = () => {
+      const d = calcDiff();
+      diffEl.textContent = 'Fark: ' + (d > 0 ? '+' : '') + formatTL(d) + (d > 0 ? ' (bütçe düşer)' : d < 0 ? ' (bütçe artar)' : '');
+    };
+    acts.forEach(inp => inp.addEventListener('input', update));
+    const finish = async (diff) => {
+      overlay.remove();
+      const rec = Object.assign({}, state.settings.reconcile);
+      rec[recon.key] = { diff };
+      state.settings.reconcile = rec;
+      await DB.saveSettings({ reconcile: rec });
+      await loadAll();
+      renderMain(selectedDate);
+    };
+    overlay.querySelector('#reconSave').addEventListener('click', () => finish(calcDiff()));
+    overlay.querySelector('#reconSkip').addEventListener('click', () => finish(0));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   }
 
   // Taksit secim sheet'i. Secilen taksit sayisini (n) ya da null (iptal) doner.

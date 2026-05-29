@@ -735,10 +735,11 @@
       <section class="list">
         <h2 class="list-title">${formatDateLong(selectedDate)} · ${dayExpenses.length} işlem · ${formatTL(dayTotal)}</h2>
         ${dayExpenses.length === 0
-          ? '<p class="empty">Bu gün için harcama yok.</p>'
+          ? `<p class="empty">Bu gün için harcama yok.</p>
+             <button type="button" id="noSpend" class="btn-ghost btn-ghost-accent nospend-btn">Harcama yapmadım ✓</button>`
           : dayExpenses.map(e => `
             <div class="exp-row" data-id="${e.id}">
-              <span class="exp-amt">${formatTL(e.amount)}</span>
+              <span class="exp-amt">${Number(e.amount) === 0 ? '<span class="exp-zero">Harcama yok</span>' : formatTL(e.amount)}</span>
               <span class="exp-meta">${e.note ? `<span class="exp-note">${escapeAttr(e.note)}</span>` : ''}<span class="exp-time">${formatWhen(e.ts)}</span></span>
               <button class="exp-del" data-id="${e.id}" aria-label="Sil">×</button>
             </div>`).join('')}
@@ -779,6 +780,9 @@
         addExpenseAndRefresh(draft, note, ts);
       }
     });
+
+    const noSpend = document.getElementById('noSpend');
+    if (noSpend) noSpend.addEventListener('click', () => addExpenseAndRefresh(0, '', dateToTs(selectedDate)));
 
     app.querySelectorAll('.exp-del').forEach(b =>
       b.addEventListener('click', () => deleteExpenseAndRefresh(Number(b.dataset.id))));

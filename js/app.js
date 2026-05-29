@@ -632,18 +632,20 @@
   // Hero sayisi count-up. Onceki degerden hedefe; prefers-reduced-motion'da aninda.
   let lastHeroValue = null;
   function animateHero(target) {
-    const el = document.querySelector('.hero-amount');
+    // Yalniz sayi kismini animasyonla; "TL" birimi ayri span, sabit kalir.
+    const el = document.querySelector('.hero-amount .amt-num') || document.querySelector('.hero-amount');
     if (!el) return;
+    const fmt = (v) => tlFmt.format(Math.round(v));
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const from = (lastHeroValue == null) ? 0 : lastHeroValue;
     lastHeroValue = target;
-    if (reduce || from === target) { el.textContent = formatTL(target); return; }
+    if (reduce || from === target) { el.textContent = fmt(target); return; }
     const dur = 500, t0 = performance.now();
     const ease = (x) => 1 - Math.pow(1 - x, 3); // ease-out cubic
-    el.textContent = formatTL(from);
+    el.textContent = fmt(from);
     function frame(t) {
       const p = Math.min((t - t0) / dur, 1);
-      el.textContent = formatTL(from + (target - from) * ease(p));
+      el.textContent = fmt(from + (target - from) * ease(p));
       if (p < 1) requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -760,7 +762,7 @@
 
       <section class="hero ${heroClass}">
         <p class="hero-label">${viewingToday ? 'Bugün harcanabilir' : 'O gün harcandı'}</p>
-        <p class="hero-amount">${formatTL(viewingToday ? r.spendableToday : dayCashTotal)}</p>
+        <p class="hero-amount"><span class="amt-num">${tlFmt.format(Math.round(viewingToday ? r.spendableToday : dayCashTotal))}</span><span class="amt-cur">TL</span></p>
         <p class="hero-sub">${viewingToday ? `${r.daysRemaining} gün kaldı · bugün dahil` : `${dayExpenses.length} işlem · ${weekdayName(selectedDate)}`}</p>
       </section>
 

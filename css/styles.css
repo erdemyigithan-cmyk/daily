@@ -184,6 +184,59 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .chip:active { background: var(--accent); color: #06120c; }
 
 /* Ana ekran */
+.day-nav {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.day-step {
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  color: var(--text);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+.day-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.day-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  overflow: hidden;
+}
+.day-picker input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.today-link {
+  align-self: center;
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+  margin: -2px 0 10px;
+  cursor: pointer;
+}
 .hero {
   background: var(--surface);
   border-radius: 24px;
@@ -198,6 +251,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   letter-spacing: -1px;
 }
 .hero.over .hero-amount { color: var(--danger); }
+.hero.history .hero-amount { color: var(--text); }
 .hero-sub { color: var(--muted); font-size: 13px; margin-top: 10px; }
 
 .balance {
@@ -249,6 +303,12 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 }
 .note-input:focus, .date-input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
 .import-label { display: block; text-align: center; cursor: pointer; }
+.entry-date {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  margin: 0 0 10px;
+}
 
 .numpad {
   display: grid;

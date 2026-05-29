@@ -120,6 +120,26 @@
             ['cumulative=500 (sifira yakin baslar)', approx(r.cumulativeBalance, 500)]
           ];
         }
+      },
+      {
+        name: 'H) Brut gelir modu: vergi dilimi arttikca aylik net duser',
+        run() {
+          const s = {
+            incomeMode: 'gross',
+            grossIncome: 100000,
+            savingsTarget: 0,
+            salaryDay: 1,
+            startDate: '2026-01-01'
+          };
+          const jan = B.computeBudget(s, [], [], new Date(2026, 0, 1));
+          const mar = B.computeBudget(s, [], [], new Date(2026, 2, 1));
+          return [
+            ['Ocak net ~= 75.953 TL', approx(jan.periodIncome, 75953.02)],
+            ['Mart net ~= 72.703 TL', approx(mar.periodIncome, 72703.02)],
+            ['Mart net < Ocak net', mar.periodIncome < jan.periodIncome],
+            ['Mart donem butcesi = Mart net', approx(mar.periodVariableBudget, mar.periodIncome)]
+          ];
+        }
       }
     ];
   }

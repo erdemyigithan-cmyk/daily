@@ -306,26 +306,41 @@
   // ---------- Ana ekran ----------
   const QUICK_AMOUNTS = [50, 100, 250, 500];
   let draft = 0; // numpad taslagi (tam sayi TL)
+  let selectedDate = todayStr();
 
-  function renderMain() {
+  function renderMain(dateStr) {
     draft = 0;
+    selectedDate = clampViewDate(dateStr || selectedDate);
+    const viewingToday = selectedDate === todayStr();
     const r = Budget.computeBudget(state.settings, state.fixed, state.expenses, new Date());
     const over = r.spendableToday < 0;
-
-    const periodExpenses = state.expenses
-      .filter(e => new Date(e.ts).getTime() >= r.periodStart.getTime())
+    const dayExpenses = expensesForDay(selectedDate)
       .sort((a, b) => new Date(b.ts) - new Date(a.ts));
+    const dayTotal = dayExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    const heroClass = viewingToday ? (over ? 'over' : '') : 'history';
 
     app.innerHTML = `
       <header class="head">
-        <h1>Bugün</h1>
+        <h1>${viewingToday ? 'Bugün' : 'Geçmiş'}</h1>
         <button id="settingsBtn" class="icon-btn" aria-label="Ayarlar">⚙</button>
       </header>
 
-      <section class="hero ${over ? 'over' : ''}">
-        <p class="hero-label">Bugün harcanabilir</p>
-        <p class="hero-amount">${formatTL(r.spendableToday)}</p>
-        <p class="hero-sub">${r.daysRemaining} gün kaldı · bugün dahil</p>
+      <section class="day-nav">
+        <button type="button" id="prevDay" class="day-step" aria-label="Önceki gün">‹</button>
+        <label class="day-picker">
+          <span>${dayTitle(selectedDate)}</span>
+          <input id="viewDateInput" type="date" value="${selectedDate}" max="${todayStr()}" aria-label="Görüntülenen tarih">
+        </label>
+        <button type="button" id="nextDay" class="day-step" aria-label="Sonraki gün" ${viewingToday ? 'disabled' : ''}>›</button>
+      </section>
+
+      ${viewingToday ? '' : '<button type="button" id="todayBtn" class="today-link">Bugüne dön</button>'}
+
+      <section class="hero ${heroClass}">
+        <p class="hero-label">${viewingToday ? 'Bugün harcanabilir' : 'O gün harcandı'}</p>
+        <p class="hero-amount">${formatTL(viewingToday ? r.spendableToday : dayTotal)}</p>
+        <p class="hero-sub">${viewingToday ? `${r.daysRemaining} gün kaldı · bugün dahil` : `${dayExpenses.length} işlem · ${weekdayName(selectedDate)}`}</p>
       </section>
 
       <section class="balance ${r.cumulativeBalance < 0 ? 'neg' : 'pos'}">
@@ -339,7 +354,7 @@
         </div>
         <div class="draft" id="draft">0 TL</div>
         <input id="noteInput" type="text" class="note-input" placeholder="Not (opsiyonel)" maxlength="60" autocomplete="off">
-        <input id="dateInput" type="date" class="date-input">
+        <p class="entry-date">${formatDateLong(selectedDate)} için eklenir</p>
         <div class="numpad">
           ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="np" data-d="${n}">${n}</button>`).join('')}
           <button class="np np-back" id="back" aria-label="Sil">⌫</button>
@@ -349,10 +364,10 @@
       </section>
 
       <section class="list">
-        <h2 class="list-title">Bu dönem (${periodExpenses.length})</h2>
-        ${periodExpenses.length === 0
-          ? '<p class="empty">Henüz harcama yok.</p>'
-          : periodExpenses.map(e => `
+        <h2 class="list-title">${formatDateLong(selectedDate)} · ${dayExpenses.length} işlem · ${formatTL(dayTotal)}</h2>
+        ${dayExpenses.length === 0
+          ? '<p class="empty">Bu gün için harcama yok.</p>'
+          : dayExpenses.map(e => `
             <div class="exp-row" data-id="${e.id}">
               <span class="exp-amt">${formatTL(e.amount)}</span>
               <span class="exp-meta">${e.note ? `<span class="exp-note">${escapeAttr(e.note)}</span>` : ''}<span class="exp-time">${formatWhen(e.ts)}</span></span>
@@ -362,22 +377,23 @@
     `;
 
     document.getElementById('settingsBtn').addEventListener('click', renderSetup);
+    document.getElementById('prevDay').addEventListener('click', () => renderMain(addDays(selectedDate, -1)));
+    document.getElementById('nextDay').addEventListener('click', () => renderMain(addDays(selectedDate, 1)));
+    document.getElementById('viewDateInput').addEventListener('change', (e) => renderMain(e.target.value));
+    const todayBtn = document.getElementById('todayBtn');
+    if (todayBtn) todayBtn.addEventListener('click', () => renderMain(todayStr()));
 
     app.querySelectorAll('.quick-btn').forEach(b =>
-      b.addEventListener('click', () => addExpenseAndRefresh(Number(b.dataset.amt))));
+      b.addEventListener('click', () => addExpenseAndRefresh(Number(b.dataset.amt), '', dateToTs(selectedDate))));
 
     app.querySelectorAll('.np[data-d]').forEach(b =>
       b.addEventListener('click', () => { draft = draft * 10 + Number(b.dataset.d); updateDraft(); }));
-
-    const dateInput = document.getElementById('dateInput');
-    dateInput.value = todayStr();
-    dateInput.max = todayStr();
 
     document.getElementById('back').addEventListener('click', () => { draft = Math.floor(draft / 10); updateDraft(); });
     document.getElementById('add').addEventListener('click', () => {
       if (draft > 0) {
         const note = document.getElementById('noteInput').value.trim();
-        const ts = dateToTs(document.getElementById('dateInput').value);
+        const ts = dateToTs(selectedDate);
         addExpenseAndRefresh(draft, note, ts);
       }
     });
@@ -416,7 +432,7 @@
       const newTs = newDateStr !== origDateStr ? dateToTs(newDateStr) : null;
       await DB.updateExpense(e.id, newAmount, newNote, newTs);
       state.expenses = await DB.getExpenses();
-      renderMain();
+      renderMain(newDateStr || selectedDate);
     });
 
     rowEl.querySelector('.edit-cancel').addEventListener('click', () => renderMain());
@@ -431,13 +447,13 @@
   async function addExpenseAndRefresh(amount, note, ts) {
     await DB.addExpense(amount, note, ts);
     state.expenses = await DB.getExpenses();
-    renderMain();
+    renderMain(selectedDate);
   }
 
   async function deleteExpenseAndRefresh(id) {
     await DB.deleteExpense(id);
     state.expenses = await DB.getExpenses();
-    renderMain();
+    renderMain(selectedDate);
   }
 
   function formatWhen(ts) {
@@ -447,6 +463,48 @@
   }
 
   // ---------- Yardimci ----------
+  function parseDateStr(dateStr) {
+    return new Date(dateStr + 'T00:00:00');
+  }
+
+  function addDays(dateStr, delta) {
+    const d = parseDateStr(dateStr);
+    d.setDate(d.getDate() + delta);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function clampViewDate(dateStr) {
+    if (!dateStr) return todayStr();
+    return dateStr > todayStr() ? todayStr() : dateStr;
+  }
+
+  function expensesForDay(dateStr) {
+    const start = parseDateStr(dateStr).getTime();
+    const end = parseDateStr(addDays(dateStr, 1)).getTime();
+    return state.expenses.filter(e => {
+      const t = new Date(e.ts).getTime();
+      return t >= start && t < end;
+    });
+  }
+
+  function dayTitle(dateStr) {
+    if (dateStr === todayStr()) return 'Bugün';
+    if (dateStr === addDays(todayStr(), -1)) return 'Dün';
+    return formatDateLong(dateStr);
+  }
+
+  function formatDateLong(dateStr) {
+    return parseDateStr(dateStr).toLocaleDateString('tr-TR', {
+      day: 'numeric',
+      month: 'long',
+      weekday: 'long'
+    });
+  }
+
+  function weekdayName(dateStr) {
+    return parseDateStr(dateStr).toLocaleDateString('tr-TR', { weekday: 'long' });
+  }
+
   function escapeAttr(str) {
     return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   }

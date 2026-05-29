@@ -74,6 +74,29 @@
     return (fixedExpenses || []).reduce((s, f) => s + (Number(f.amount) || 0), 0);
   }
 
+  function getPayroll() {
+    if (root.Payroll) return root.Payroll;
+    if (typeof require === 'function') {
+      try { return require('./payroll.js'); } catch (err) { return null; }
+    }
+    return null;
+  }
+
+  function incomeForDate(settings, date) {
+    if (settings && settings.incomeMode === 'gross') {
+      const payroll = getPayroll();
+      const gross = Number(settings.grossIncome) || 0;
+      if (payroll && gross > 0) {
+        return payroll.computeMonthlyNet({
+          gross,
+          year: date.getFullYear(),
+          month: date.getMonth() + 1
+        }).net;
+      }
+    }
+    return Number(settings.income) || 0;
+  }
+
   // [from, to) araliginda yapilan degisken harcamalarin toplami.
   // from null ise alt sinir yok.
   function sumExpensesInRange(expenses, from, to) {
@@ -103,13 +126,13 @@
   function computeBudget(settings, fixedExpenses, expenses, now) {
     now = now || new Date();
     const salaryDay = Number(settings.salaryDay);
-    const income = Number(settings.income) || 0;
     const savings = Number(settings.savingsTarget) || 0;
-
-    const V = income - sumFixed(fixedExpenses) - savings; // donem degisken butcesi
 
     const periodStart = periodStartFor(now, salaryDay);
     const periodEnd = nextPeriodStart(periodStart, salaryDay);
+    const fixedTotal = sumFixed(fixedExpenses);
+    const currentIncome = incomeForDate(settings, periodStart);
+    const V = currentIncome - fixedTotal - savings; // mevcut donem degisken butcesi
 
     const startDate = settings.startDate ? parseLocalDate(settings.startDate) : now;
 
@@ -120,7 +143,8 @@
     while (monthIndex(p) < monthIndex(periodStart)) {
       const pEnd = nextPeriodStart(p, salaryDay);
       const aStart = maxDate(p, startDate);
-      rolloverIn += periodBudget(V, p, pEnd, aStart) - sumExpensesInRange(expenses, aStart, pEnd);
+      const periodV = incomeForDate(settings, p) - fixedTotal - savings;
+      rolloverIn += periodBudget(periodV, p, pEnd, aStart) - sumExpensesInRange(expenses, aStart, pEnd);
       p = pEnd;
     }
 
@@ -149,6 +173,7 @@
     return {
       spendableToday,        // bugun harcanabilir (negatif olabilir = asim)
       cumulativeBalance,     // tum zaman: + tampon, - asim
+      periodIncome: currentIncome,
       periodVariableBudget: V,
       rolloverIn,
       spentThisPeriod,
@@ -167,6 +192,7 @@
     nextPeriodStart,
     clampDay,
     lastDayOfMonth,
+    incomeForDate,
     sumFixed,
     sumExpensesInRange
   };

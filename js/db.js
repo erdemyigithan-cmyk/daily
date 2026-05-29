@@ -90,9 +90,10 @@
     return tx('expenses', 'readonly', s => reqToPromise(s.getAll()));
   }
 
-  function addExpense(amount, note, ts) {
+  function addExpense(amount, note, ts, source) {
     const rec = { amount: Number(amount), ts: ts || new Date().toISOString() };
     if (note) rec.note = String(note).trim();
+    if (source === 'meal') rec.source = 'meal'; // varsayilan 'cash' (alan yok)
     return tx('expenses', 'readwrite', s => reqToPromise(s.add(rec)));
   }
 
@@ -118,6 +119,7 @@
       for (const item of list) {
         const rec = { amount: Number(item.amount), ts: item.ts };
         if (item.note) rec.note = String(item.note);
+        if (item.source === 'meal') rec.source = 'meal';
         s.add(rec);
       }
     });

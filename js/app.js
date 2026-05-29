@@ -95,11 +95,14 @@
     return `<span>+ ${escapeHTML(name)}</span>${price}`;
   }
 
+  const MEAL_PROVIDERS = ['Pluxee', 'Edenred', 'Multinet', 'Metropol', 'Setcard', 'Sodexo', 'Diğer'];
+
   function renderSetup() {
     document.body.classList.remove('has-tabbar'); // kurulum tam ekran, alt bar yok
     const s = state.settings || {};
     const fixed = state.fixed.length ? state.fixed : [];
     const incomes = Budget.normalizeIncomes(s);
+    const mc = s.mealCard || {};
 
     app.innerHTML = `
       <header class="head"><h1>${isConfigured() ? 'Kurulumu Düzenle' : 'Kurulum'}</h1></header>
@@ -119,6 +122,22 @@
             ${[5,10,15,20,25,30].map(p =>
               `<button type="button" class="pct-chip" data-pct="${p}">%${p}</button>`
             ).join('')}
+          </div>
+        </div>
+
+        <div class="field">
+          <span>Yemek kartı</span>
+          <label class="meal-toggle">
+            <input type="checkbox" id="mealEnabled" ${mc.enabled ? 'checked' : ''}>
+            <span>Yemek kartım var (ayrı cüzdan)</span>
+          </label>
+          <div id="mealFields" class="meal-fields" ${mc.enabled ? '' : 'hidden'}>
+            <select id="mealProvider">
+              ${MEAL_PROVIDERS.map(p => `<option ${mc.provider === p ? 'selected' : ''}>${p}</option>`).join('')}
+            </select>
+            <input id="mealLoad" type="text" inputmode="numeric" placeholder="Aylık yükleme (TL)"
+                   value="${mc.monthlyLoad > 0 ? tlFmt.format(mc.monthlyLoad) : ''}">
+            <small class="hint">Bu para günlük nakit bütçeni etkilemez; yalnız yemek kartı bakiyesinde tutulur.</small>
           </div>
         </div>
 
@@ -172,6 +191,11 @@
     document.getElementById('addIncome').addEventListener('click', () => {
       const row = addIncomeRow(incomeList, 'net');
       row.querySelector('.inc-amount').focus();
+    });
+
+    applyNumFmt(document.getElementById('mealLoad'));
+    document.getElementById('mealEnabled').addEventListener('change', (e) => {
+      document.getElementById('mealFields').hidden = !e.target.checked;
     });
 
     document.querySelector('.pct-chips').addEventListener('click', (e) => {
@@ -561,6 +585,21 @@
     const live = Budget.configForPeriod({ history }, curDate) || newSnap;
     const totalNet = Math.round(Budget.incomeForDate({ incomes: live.incomes }, new Date()));
 
+    // Yemek karti config (ayri cuzdan)
+    const mealEnabled = document.getElementById('mealEnabled').checked;
+    let mealCard;
+    if (mealEnabled) {
+      const prevMc = existing.mealCard || {};
+      mealCard = {
+        enabled: true,
+        provider: document.getElementById('mealProvider').value,
+        monthlyLoad: parseAmount(document.getElementById('mealLoad').value),
+        startMonth: prevMc.startMonth || curPeriod.slice(0, 7)
+      };
+    } else {
+      mealCard = { enabled: false };
+    }
+
     await DB.saveSettings({
       history,
       incomes: live.incomes,
@@ -568,7 +607,8 @@
       savingsTarget: live.savingsTarget,
       incomeMode: live.incomes.length === 1 ? live.incomes[0].mode : 'mixed',
       grossIncome: 0,
-      salaryDay
+      salaryDay,
+      mealCard
     });
     await DB.replaceFixedExpenses(live.fixed);
     await loadAll();
@@ -579,6 +619,7 @@
   const QUICK_AMOUNTS = [50, 100, 250, 500];
   let draft = 0; // numpad taslagi (tam sayi TL)
   let selectedDate = todayStr();
+  let entrySource = 'cash'; // harcama kaynagi: 'cash' | 'meal'
 
   // Hero sayisi count-up. Onceki degerden hedefe; prefers-reduced-motion'da aninda.
   let lastHeroValue = null;
@@ -678,14 +719,17 @@
     draft = 0;
     selectedDate = clampViewDate(dateStr || selectedDate);
     const viewingToday = selectedDate === todayStr();
-    const r = Budget.computeBudget(state.settings, state.fixed, state.expenses, new Date());
+    // Yemek karti harcamalari nakit butcesine karismaz: budget'a yalniz cash verilir.
+    const r = Budget.computeBudget(state.settings, state.fixed, cashExpenses(), new Date());
     const over = r.spendableToday < 0;
     const dayExpenses = expensesForDay(selectedDate)
       .sort((a, b) => new Date(b.ts) - new Date(a.ts));
-    const dayTotal = dayExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const dayCashTotal = dayExpenses.filter(e => e.source !== 'meal').reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const dayMealTotal = dayExpenses.filter(e => e.source === 'meal').reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
     const heroClass = viewingToday ? (over ? 'over' : '') : 'history';
     const streak = viewingToday ? computeStreakWithFreeze(r.spendableToday) : null;
+    const meal = viewingToday ? mealCardInfo() : null;
 
     app.innerHTML = `
       <header class="head">
@@ -706,7 +750,7 @@
 
       <section class="hero ${heroClass}">
         <p class="hero-label">${viewingToday ? 'Bugün harcanabilir' : 'O gün harcandı'}</p>
-        <p class="hero-amount">${formatTL(viewingToday ? r.spendableToday : dayTotal)}</p>
+        <p class="hero-amount">${formatTL(viewingToday ? r.spendableToday : dayCashTotal)}</p>
         <p class="hero-sub">${viewingToday ? `${r.daysRemaining} gün kaldı · bugün dahil` : `${dayExpenses.length} işlem · ${weekdayName(selectedDate)}`}</p>
       </section>
 
@@ -717,11 +761,25 @@
         <strong>${r.cumulativeBalance >= 0 ? '+' : ''}${formatTL(r.cumulativeBalance)}</strong>
       </section>
 
+      ${meal ? `
+      <section class="balance mealcard">
+        <span>🍽️ ${escapeAttr(meal.provider || 'Yemek kartı')}</span>
+        <span class="mealcard-right">
+          <strong>${formatTL(meal.balance)}</strong>
+          <small>bu ay −${formatTL(meal.thisMonthSpent)}</small>
+        </span>
+      </section>` : ''}
+
       <section class="entry">
         <div class="quick">
           ${QUICK_AMOUNTS.map(a => `<button class="quick-btn" data-amt="${a}">+${a}</button>`).join('')}
         </div>
         <div class="draft" id="draft">0 TL</div>
+        ${meal ? `
+        <div class="src-switch" id="srcSwitch">
+          <button type="button" class="src ${entrySource === 'cash' ? 'active' : ''}" data-src="cash">Nakit</button>
+          <button type="button" class="src ${entrySource === 'meal' ? 'active' : ''}" data-src="meal">🍽️ Yemek kartı</button>
+        </div>` : ''}
         <input id="noteInput" type="text" class="note-input" placeholder="Not (opsiyonel)" maxlength="60" autocomplete="off">
         <p class="entry-date">${formatDateLong(selectedDate)} için eklenir</p>
         <div class="numpad">
@@ -733,13 +791,13 @@
       </section>
 
       <section class="list">
-        <h2 class="list-title">${formatDateLong(selectedDate)} · ${dayExpenses.length} işlem · ${formatTL(dayTotal)}</h2>
+        <h2 class="list-title">${formatDateLong(selectedDate)} · ${dayExpenses.length} işlem · ${formatTL(dayCashTotal)}${dayMealTotal > 0 ? ` · 🍽️ ${formatTL(dayMealTotal)}` : ''}</h2>
         ${dayExpenses.length === 0
           ? `<p class="empty">Bu gün için harcama yok.</p>
              <button type="button" id="noSpend" class="btn-ghost btn-ghost-accent nospend-btn">Harcama yapmadım ✓</button>`
           : dayExpenses.map(e => `
-            <div class="exp-row" data-id="${e.id}">
-              <span class="exp-amt">${Number(e.amount) === 0 ? '<span class="exp-zero">Harcama yok</span>' : formatTL(e.amount)}</span>
+            <div class="exp-row ${e.source === 'meal' ? 'meal' : ''}" data-id="${e.id}">
+              <span class="exp-amt">${Number(e.amount) === 0 ? '<span class="exp-zero">Harcama yok</span>' : formatTL(e.amount)}${e.source === 'meal' ? ' <span class="exp-badge">🍽️</span>' : ''}</span>
               <span class="exp-meta">${e.note ? `<span class="exp-note">${escapeAttr(e.note)}</span>` : ''}<span class="exp-time">${formatWhen(e.ts)}</span></span>
               <button class="exp-del" data-id="${e.id}" aria-label="Sil">×</button>
             </div>`).join('')}
@@ -766,8 +824,16 @@
     const todayBtn = document.getElementById('todayBtn');
     if (todayBtn) todayBtn.addEventListener('click', () => renderMain(todayStr()));
 
+    const srcSwitch = document.getElementById('srcSwitch');
+    if (srcSwitch) srcSwitch.addEventListener('click', (e) => {
+      const btn = e.target.closest('.src');
+      if (!btn) return;
+      entrySource = btn.dataset.src;
+      srcSwitch.querySelectorAll('.src').forEach(s => s.classList.toggle('active', s === btn));
+    });
+
     app.querySelectorAll('.quick-btn').forEach(b =>
-      b.addEventListener('click', () => addExpenseAndRefresh(Number(b.dataset.amt), '', dateToTs(selectedDate))));
+      b.addEventListener('click', () => addExpenseAndRefresh(Number(b.dataset.amt), '', dateToTs(selectedDate), entrySource)));
 
     app.querySelectorAll('.np[data-d]').forEach(b =>
       b.addEventListener('click', () => { draft = draft * 10 + Number(b.dataset.d); updateDraft(); }));
@@ -777,12 +843,12 @@
       if (draft > 0) {
         const note = document.getElementById('noteInput').value.trim();
         const ts = dateToTs(selectedDate);
-        addExpenseAndRefresh(draft, note, ts);
+        addExpenseAndRefresh(draft, note, ts, entrySource);
       }
     });
 
     const noSpend = document.getElementById('noSpend');
-    if (noSpend) noSpend.addEventListener('click', () => addExpenseAndRefresh(0, '', dateToTs(selectedDate)));
+    if (noSpend) noSpend.addEventListener('click', () => addExpenseAndRefresh(0, '', dateToTs(selectedDate), 'cash'));
 
     app.querySelectorAll('.exp-del').forEach(b =>
       b.addEventListener('click', () => deleteExpenseAndRefresh(Number(b.dataset.id))));
@@ -830,10 +896,31 @@
     if (el) el.textContent = formatTL(draft);
   }
 
-  async function addExpenseAndRefresh(amount, note, ts) {
-    await DB.addExpense(amount, note, ts);
+  async function addExpenseAndRefresh(amount, note, ts, source) {
+    await DB.addExpense(amount, note, ts, source);
     state.expenses = await DB.getExpenses();
     renderMain(selectedDate);
+  }
+
+  // Yemek karti yardimcilari
+  function cashExpenses() { return state.expenses.filter(e => e.source !== 'meal'); }
+  function mealExpenses() { return state.expenses.filter(e => e.source === 'meal'); }
+
+  function mealCardInfo() {
+    const mc = state.settings && state.settings.mealCard;
+    if (!mc || !mc.enabled) return null;
+    const load = Number(mc.monthlyLoad) || 0;
+    const now = new Date();
+    const start = mc.startMonth || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+    const [sy, sm] = start.split('-').map(Number);
+    const loadMonths = Math.max(1, (now.getFullYear() - sy) * 12 + (now.getMonth() + 1 - sm) + 1);
+    const totalLoaded = load * loadMonths;
+    const totalSpent = mealExpenses().reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const thisMonthSpent = mealExpenses()
+      .filter(e => new Date(e.ts).getTime() >= monthStart)
+      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    return { balance: totalLoaded - totalSpent, monthlyLoad: load, thisMonthSpent, provider: mc.provider };
   }
 
   async function deleteExpenseAndRefresh(id) {
@@ -965,8 +1052,9 @@
 
   function renderStats() {
     const r = statsRange(statsPeriod);
-    const sum = Stats.summarize(state.expenses, r.from, r.to);
-    const cmp = Stats.compare(state.expenses, r.from, r.to, r.prevFrom, r.prevTo);
+    const cash = cashExpenses(); // yemek karti istatistige karismaz
+    const sum = Stats.summarize(cash, r.from, r.to);
+    const cmp = Stats.compare(cash, r.from, r.to, r.prevFrom, r.prevTo);
 
     const maxTotal = sum.series.reduce((m, d) => Math.max(m, d.total), 0);
     const manyBars = sum.series.length > 14;
@@ -1046,9 +1134,11 @@
 
   // ---------- Kumbara ekrani ----------
   function renderKumbara() {
-    const r = Budget.computeBudget(state.settings, state.fixed, state.expenses, new Date());
+    const r = Budget.computeBudget(state.settings, state.fixed, cashExpenses(), new Date());
     const savingsTarget = Number(state.settings.savingsTarget) || 0;
-    const spentToday = expensesForDay(todayStr()).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const spentToday = expensesForDay(todayStr())
+      .filter(e => e.source !== 'meal')
+      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const sv = Savings.compute({
       periodVariableBudget: r.periodVariableBudget,
       savingsTarget,

@@ -852,6 +852,9 @@
         <button class="sheet-item" id="sheetSettings">
           <span class="sheet-icon">⚙</span> Ayarlar
         </button>
+        <button class="sheet-item" id="sheetCsv">
+          <span class="sheet-icon">📄</span> Harcama geçmişi (CSV / Excel)
+        </button>
         <button class="sheet-item" id="sheetExport">
           <span class="sheet-icon">↓</span> Dışa aktar (JSON yedek)
         </button>
@@ -867,12 +870,41 @@
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
     overlay.querySelector('#sheetSettings').addEventListener('click', () => { close(); renderSetup(); });
+    overlay.querySelector('#sheetCsv').addEventListener('click', () => { close(); exportCsv(); });
     overlay.querySelector('#sheetExport').addEventListener('click', () => { close(); exportData(); });
     overlay.querySelector('#sheetImportFile').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       close();
       if (file) await importData(file);
     });
+  }
+
+  // ---------- CSV (Excel / analiz) ----------
+  async function exportCsv() {
+    const expenses = (await DB.getExpenses())
+      .sort((a, b) => new Date(a.ts) - new Date(b.ts)); // eskiden yeniye (trend analizi)
+    const sep = ';'; // Turkce Excel ayraci
+    const cell = (v) => {
+      const s = String(v == null ? '' : v);
+      return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const rows = [['Tarih', 'Saat', 'Tutar (TL)', 'Not']];
+    for (const e of expenses) {
+      const d = new Date(e.ts);
+      const tarih = String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear();
+      const saat = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      rows.push([tarih, saat, Math.round(Number(e.amount) || 0), e.note || '']);
+    }
+    // UTF-8 BOM: Excel'de Turkce karakterler dogru gorunsun
+    const csv = '﻿' + rows.map(r => r.map(cell).join(sep)).join('\r\n');
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })),
+      download: 'harcama-gecmisi-' + todayStr() + '.csv'
+    });
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
   }
 
   // ---------- JSON yedek ----------

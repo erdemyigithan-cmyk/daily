@@ -41,6 +41,11 @@
   }
 
   // ---------- Kurulum ekrani ----------
+  // Baslangic taslagi: tipik Turk hanesi, tutarlar bos (herkese gore degisir).
+  const STARTER_TEMPLATE = [
+    'Kira', 'Elektrik', 'Su', 'Doğal gaz', 'Aidat', 'İnternet', 'Telefon'
+  ];
+
   // Sabit gider sablonlari. Tek tusla eklenir; isim = islevsel etiket (marka degil).
   // Kategoriler yalnizca buton listesini gruplar, saklanmaz (sema: isim+tutar).
   const PRESETS = [
@@ -109,7 +114,10 @@
         <div class="field">
           <span>Sabit giderler</span>
           <div id="fixedList"></div>
-          <button type="button" id="addFixed" class="btn-ghost">+ Boş satır ekle</button>
+          <div class="fixed-actions">
+            <button type="button" id="addFixed" class="btn-ghost">+ Boş satır ekle</button>
+            <button type="button" id="applyTemplate" class="btn-ghost btn-ghost-accent">Taslak şablon dene</button>
+          </div>
           <div class="presets-wrap">
             <small class="hint">Hazır şablon: kategoriye dokun, açılır.</small>
             <div id="presets">${buildPresetsHTML()}</div>
@@ -157,6 +165,12 @@
     document.getElementById('addFixed').addEventListener('click', () => {
       const row = addFixedRow(fixedList);
       row.querySelector('.fx-name').focus();
+    });
+
+    document.getElementById('applyTemplate').addEventListener('click', () => {
+      STARTER_TEMPLATE.forEach(name => addFixedRow(fixedList, name));
+      fixedList.querySelector('.fx-amount')?.focus();
+      fixedList.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
     setupForm.addEventListener('submit', onSaveSetup);
 

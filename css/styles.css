@@ -470,18 +470,16 @@ input:focus, select:focus {
   letter-spacing: -0.02em;
   text-shadow: 0 0 44px color-mix(in srgb, var(--accent) 32%, transparent);
   transition: color 0.45s ease, text-shadow 0.45s ease;
-  /* sayı + birim baseline hizalı */
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 0.14em;
 }
-.hero-amount .amt-cur {
-  font-size: 0.42em;
+/* Display-font tutarlarda ortak "TL" birimi: küçük, baseline hizalı, yumuşak */
+.amt-cur {
+  font-size: 0.46em;
   font-weight: 560;
   letter-spacing: 0.01em;
-  color: color-mix(in srgb, currentColor 72%, transparent);
+  margin-left: 0.14em;
+  color: color-mix(in srgb, currentColor 70%, transparent);
 }
+.hero-amount .amt-cur { font-size: 0.42em; }
 .hero.over .hero-amount { color: var(--danger); text-shadow: 0 0 44px color-mix(in srgb, var(--danger) 30%, transparent); }
 .hero.history .hero-amount { color: var(--text); text-shadow: none; }
 .hero-sub { color: var(--muted); font-size: 13px; margin-top: 12px; }

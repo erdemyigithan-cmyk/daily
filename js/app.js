@@ -10,6 +10,11 @@
     return tlFmt.format(v) + ' TL';
   }
 
+  // Display-font (Fraunces) sayilar icin: sayi + ayri kucuk "TL" birimi (baseline hizali).
+  function amtHtml(n) {
+    return `<span class="amt-num">${tlFmt.format(Math.round(n))}</span><span class="amt-cur">TL</span>`;
+  }
+
   // Input alanlari icin: tum tirnak/bosluk/noktalama kaldir, tamsayi dondur.
   function parseAmount(s) {
     return parseInt(String(s).replace(/\D/g, ''), 10) || 0;
@@ -762,7 +767,7 @@
 
       <section class="hero ${heroClass}">
         <p class="hero-label">${viewingToday ? 'Bugün harcanabilir' : 'O gün harcandı'}</p>
-        <p class="hero-amount"><span class="amt-num">${tlFmt.format(Math.round(viewingToday ? r.spendableToday : dayCashTotal))}</span><span class="amt-cur">TL</span></p>
+        <p class="hero-amount">${amtHtml(viewingToday ? r.spendableToday : dayCashTotal)}</p>
         <p class="hero-sub">${viewingToday ? `${r.daysRemaining} gün kaldı · bugün dahil` : `${dayExpenses.length} işlem · ${weekdayName(selectedDate)}`}</p>
       </section>
 
@@ -794,7 +799,7 @@
       </section>` : ''}
 
       <section class="entry">
-        <div class="draft" id="draft">0 TL</div>
+        <div class="draft" id="draft">${amtHtml(0)}</div>
         ${meal ? `
         <div class="src-switch" id="srcSwitch">
           <button type="button" class="src ${entrySource === 'cash' ? 'active' : ''}" data-src="cash">Nakit</button>
@@ -929,7 +934,7 @@
   function updateDraft() {
     if (draft > 999999) draft = 999999; // makul sinir
     const el = document.getElementById('draft');
-    if (el) el.textContent = formatTL(draft);
+    if (el) el.innerHTML = amtHtml(draft);
   }
 
   async function addExpenseAndRefresh(amount, note, ts, source) {
@@ -1286,16 +1291,16 @@
       <section class="stat-cards">
         <div class="stat-card">
           <span class="stat-label">Toplam harcama</span>
-          <strong class="stat-value">${formatTL(sum.total)}</strong>
+          <strong class="stat-value">${amtHtml(sum.total)}</strong>
         </div>
         <div class="stat-card">
           <span class="stat-label">Günlük ortalama</span>
-          <strong class="stat-value">${formatTL(sum.dailyAvg)}</strong>
+          <strong class="stat-value">${amtHtml(sum.dailyAvg)}</strong>
           <small class="stat-sub">${sum.loggedDays} günde</small>
         </div>
         <div class="stat-card">
           <span class="stat-label">En yüksek gün</span>
-          <strong class="stat-value">${sum.maxDay.total > 0 ? formatTL(sum.maxDay.total) : '—'}</strong>
+          <strong class="stat-value">${sum.maxDay.total > 0 ? amtHtml(sum.maxDay.total) : '—'}</strong>
           <small class="stat-sub">${sum.maxDay.total > 0 ? shortDate(sum.maxDay.date) : ''}</small>
         </div>
         <div class="stat-card">

@@ -101,7 +101,7 @@
     const incomes = Budget.normalizeIncomes(s);
 
     app.innerHTML = `
-      <header class="head"><h1>Kurulum</h1></header>
+      <header class="head"><h1>${isConfigured() ? 'Kurulumu Düzenle' : 'Kurulum'}</h1></header>
       <form id="setupForm" class="form setup-form">
         <div class="field">
           <span>Gelirler</span>
@@ -503,7 +503,7 @@
         <h1>${viewingToday ? 'Bugün' : 'Geçmiş'}</h1>
         <div class="head-actions">
           <button id="statsBtn" class="icon-btn" aria-label="İstatistikler">📊</button>
-          <button id="settingsBtn" class="icon-btn" aria-label="Ayarlar">⚙</button>
+          <button id="settingsBtn" class="icon-btn" aria-label="Menü">⚙</button>
         </div>
       </header>
 
@@ -850,7 +850,7 @@
       <div class="sheet" role="dialog" aria-modal="true">
         <div class="sheet-handle"></div>
         <button class="sheet-item" id="sheetSettings">
-          <span class="sheet-icon">⚙</span> Ayarlar
+          <span class="sheet-icon">✎</span> Kurulumu düzenle
         </button>
         <button class="sheet-item" id="sheetCsv">
           <span class="sheet-icon">📄</span> Harcama geçmişi (CSV / Excel)

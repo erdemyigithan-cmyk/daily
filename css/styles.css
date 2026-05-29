@@ -201,6 +201,18 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   color: var(--text);
 }
 
+.note-input {
+  font-size: 15px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  color: var(--text);
+  width: 100%;
+}
+.note-input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+
 .numpad {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -239,10 +251,40 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   margin-bottom: 8px;
 }
 .exp-amt { font-weight: 700; font-size: 16px; }
+.exp-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.exp-note { color: var(--text); font-size: 13px; }
 .exp-time { color: var(--muted); font-size: 13px; }
+.exp-row { cursor: pointer; }
 .exp-del {
   background: transparent; border: none;
   color: var(--muted); font-size: 22px;
   cursor: pointer; line-height: 1;
 }
 .exp-del:active { color: var(--danger); }
+
+.exp-row.editing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: default;
+}
+.exp-row.editing input {
+  font-size: 15px;
+  padding: 10px 12px;
+}
+.edit-btns { display: flex; gap: 8px; }
+.edit-save {
+  flex: 1;
+  background: var(--accent); color: #06120c;
+  border: none; border-radius: var(--radius);
+  font-size: 15px; font-weight: 700;
+  padding: 12px; cursor: pointer;
+}
+.edit-cancel {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--surface-2);
+  color: var(--muted);
+  border-radius: var(--radius);
+  font-size: 15px; padding: 12px; cursor: pointer;
+}

@@ -223,6 +223,7 @@
           ${QUICK_AMOUNTS.map(a => `<button class="quick-btn" data-amt="${a}">+${a}</button>`).join('')}
         </div>
         <div class="draft" id="draft">0 TL</div>
+        <input id="noteInput" type="text" class="note-input" placeholder="Not (opsiyonel)" maxlength="60" autocomplete="off">
         <div class="numpad">
           ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="np" data-d="${n}">${n}</button>`).join('')}
           <button class="np np-back" id="back" aria-label="Sil">⌫</button>
@@ -236,9 +237,9 @@
         ${periodExpenses.length === 0
           ? '<p class="empty">Henüz harcama yok.</p>'
           : periodExpenses.map(e => `
-            <div class="exp-row">
+            <div class="exp-row" data-id="${e.id}">
               <span class="exp-amt">${formatTL(e.amount)}</span>
-              <span class="exp-time">${formatWhen(e.ts)}</span>
+              <span class="exp-meta">${e.note ? `<span class="exp-note">${escapeAttr(e.note)}</span>` : ''}<span class="exp-time">${formatWhen(e.ts)}</span></span>
               <button class="exp-del" data-id="${e.id}" aria-label="Sil">×</button>
             </div>`).join('')}
       </section>
@@ -254,11 +255,46 @@
 
     document.getElementById('back').addEventListener('click', () => { draft = Math.floor(draft / 10); updateDraft(); });
     document.getElementById('add').addEventListener('click', () => {
-      if (draft > 0) addExpenseAndRefresh(draft);
+      if (draft > 0) {
+        const note = document.getElementById('noteInput').value.trim();
+        addExpenseAndRefresh(draft, note);
+      }
     });
 
     app.querySelectorAll('.exp-del').forEach(b =>
       b.addEventListener('click', () => deleteExpenseAndRefresh(Number(b.dataset.id))));
+
+    app.querySelectorAll('.exp-row').forEach(row =>
+      row.addEventListener('click', ev => {
+        if (ev.target.closest('.exp-del')) return;
+        const expense = state.expenses.find(x => x.id === Number(row.dataset.id));
+        if (expense) renderEditRow(row, expense);
+      }));
+  }
+
+  function renderEditRow(rowEl, e) {
+    rowEl.classList.add('editing');
+    rowEl.innerHTML = `
+      <input class="edit-amt" type="text" inputmode="numeric" value="${tlFmt.format(e.amount)}">
+      <input class="edit-note" type="text" placeholder="Not (opsiyonel)" maxlength="60" value="${escapeAttr(e.note || '')}">
+      <div class="edit-btns">
+        <button class="edit-save">Kaydet</button>
+        <button class="edit-cancel">İptal</button>
+      </div>
+    `;
+    applyNumFmt(rowEl.querySelector('.edit-amt'));
+    rowEl.querySelector('.edit-amt').focus();
+
+    rowEl.querySelector('.edit-save').addEventListener('click', async () => {
+      const newAmount = parseAmount(rowEl.querySelector('.edit-amt').value);
+      const newNote = rowEl.querySelector('.edit-note').value.trim();
+      if (newAmount <= 0) { alert('Geçerli bir tutar girin.'); return; }
+      await DB.updateExpense(e.id, newAmount, newNote);
+      state.expenses = await DB.getExpenses();
+      renderMain();
+    });
+
+    rowEl.querySelector('.edit-cancel').addEventListener('click', () => renderMain());
   }
 
   function updateDraft() {
@@ -267,8 +303,8 @@
     if (el) el.textContent = formatTL(draft);
   }
 
-  async function addExpenseAndRefresh(amount) {
-    await DB.addExpense(amount);
+  async function addExpenseAndRefresh(amount, note) {
+    await DB.addExpense(amount, note);
     state.expenses = await DB.getExpenses();
     renderMain();
   }

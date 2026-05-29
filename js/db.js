@@ -90,13 +90,25 @@
     return tx('expenses', 'readonly', s => reqToPromise(s.getAll()));
   }
 
-  function addExpense(amount, ts) {
+  function addExpense(amount, note, ts) {
     const rec = { amount: Number(amount), ts: ts || new Date().toISOString() };
+    if (note) rec.note = String(note).trim();
     return tx('expenses', 'readwrite', s => reqToPromise(s.add(rec)));
   }
 
   function deleteExpense(id) {
     return tx('expenses', 'readwrite', s => reqToPromise(s.delete(id)));
+  }
+
+  function updateExpense(id, amount, note) {
+    return tx('expenses', 'readonly', s => reqToPromise(s.get(id)))
+      .then(rec => {
+        if (!rec) return;
+        rec.amount = Number(amount);
+        if (note && String(note).trim()) rec.note = String(note).trim();
+        else delete rec.note;
+        return tx('expenses', 'readwrite', s => reqToPromise(s.put(rec)));
+      });
   }
 
   root.DB = {
@@ -106,6 +118,7 @@
     replaceFixedExpenses,
     getExpenses,
     addExpense,
-    deleteExpense
+    deleteExpense,
+    updateExpense
   };
 })(typeof self !== 'undefined' ? self : this);

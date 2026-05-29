@@ -128,14 +128,20 @@
     const accrualStart = maxDate(periodStart, startDate);
     const fullDays = dayIndex(periodEnd) - dayIndex(periodStart);
     const curBudget = periodBudget(V, periodStart, periodEnd, accrualStart);
-    const spentThisPeriod = sumExpensesInRange(expenses, accrualStart, periodEnd);
+
+    // Bugunun harcamalari 1:1 duser; onceki gunler kalan gunlere yayilir.
+    const todayMidnight = atMidnight(now.getFullYear(), now.getMonth(), now.getDate());
+    const spentBeforeToday = sumExpensesInRange(expenses, accrualStart, todayMidnight);
+    const spentToday = sumExpensesInRange(expenses, todayMidnight, periodEnd);
+    const spentThisPeriod = spentBeforeToday + spentToday;
 
     const today = dayIndex(now);
     const daysRemaining = dayIndex(periodEnd) - today;             // bugun dahil, >= 1
     const daysAccrued = today - dayIndex(accrualStart) + 1;        // bugun dahil
 
     const availableNow = curBudget + rolloverIn - spentThisPeriod;
-    const spendableToday = availableNow / daysRemaining;
+    const baseAllowance = (curBudget + rolloverIn - spentBeforeToday) / daysRemaining;
+    const spendableToday = baseAllowance - spentToday;
 
     const accruedSoFar = V * (daysAccrued / fullDays);
     const cumulativeBalance = rolloverIn + accruedSoFar - spentThisPeriod;

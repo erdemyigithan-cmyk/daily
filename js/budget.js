@@ -82,19 +82,40 @@
     return null;
   }
 
-  function incomeForDate(settings, date) {
+  // Ayarlardaki gelir(ler)i tek bir listeye normalize et (geriye uyumlu).
+  // Yeni model: settings.incomes = [{ mode:'net'|'gross', amount }]
+  function normalizeIncomes(settings) {
+    if (settings && Array.isArray(settings.incomes) && settings.incomes.length) {
+      return settings.incomes.map(i => ({
+        mode: i.mode === 'gross' ? 'gross' : 'net',
+        amount: Number(i.amount) || 0
+      }));
+    }
+    // Eski tekil model
     if (settings && settings.incomeMode === 'gross') {
-      const payroll = getPayroll();
-      const gross = Number(settings.grossIncome) || 0;
-      if (payroll && gross > 0) {
-        return payroll.computeMonthlyNet({
-          gross,
+      return [{ mode: 'gross', amount: Number(settings.grossIncome) || 0 }];
+    }
+    return [{ mode: 'net', amount: Number(settings && settings.income) || 0 }];
+  }
+
+  // Verilen ay icin toplam NET gelir. Brut gelirler AYRI AYRI bordrodan cevrilir
+  // (TR gelir vergisi kisi basi kumulatif/artan oranli; toplayip tek hesap yanlis olur).
+  function incomeForDate(settings, date) {
+    const list = normalizeIncomes(settings);
+    const payroll = getPayroll();
+    let total = 0;
+    for (const inc of list) {
+      if (inc.mode === 'gross' && payroll && inc.amount > 0) {
+        total += payroll.computeMonthlyNet({
+          gross: inc.amount,
           year: date.getFullYear(),
           month: date.getMonth() + 1
         }).net;
+      } else {
+        total += inc.amount;
       }
     }
-    return Number(settings.income) || 0;
+    return total;
   }
 
   // [from, to) araliginda yapilan degisken harcamalarin toplami.
@@ -193,6 +214,7 @@
     clampDay,
     lastDayOfMonth,
     incomeForDate,
+    normalizeIncomes,
     sumFixed,
     sumExpensesInRange
   };

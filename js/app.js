@@ -98,23 +98,17 @@
   function renderSetup() {
     const s = state.settings || {};
     const fixed = state.fixed.length ? state.fixed : [];
-    const incomeMode = s.incomeMode === 'gross' ? 'gross' : 'net';
-    const incomeValue = incomeMode === 'gross' ? s.grossIncome : s.income;
+    const incomes = Budget.normalizeIncomes(s);
 
     app.innerHTML = `
       <header class="head"><h1>Kurulum</h1></header>
       <form id="setupForm" class="form setup-form">
-        <div class="income-switch" aria-label="Gelir tipi">
-          <button type="button" class="income-mode ${incomeMode === 'net' ? 'active' : ''}" data-mode="net">Net</button>
-          <button type="button" class="income-mode ${incomeMode === 'gross' ? 'active' : ''}" data-mode="gross">Brüt</button>
+        <div class="field">
+          <span>Gelirler</span>
+          <div id="incomeList"></div>
+          <button type="button" id="addIncome" class="btn-ghost">+ Gelir ekle</button>
+          <small id="incomeTotal" class="hint"></small>
         </div>
-
-        <label class="field">
-          <span id="incomeLabel">Aylık net gelir (TL)</span>
-          <input id="income" type="text" inputmode="numeric"
-                 value="${incomeValue > 0 ? tlFmt.format(incomeValue) : ''}" required>
-          <small id="incomePreview" class="hint"></small>
-        </label>
 
         <div class="field">
           <span>Aylık tasarruf hedefi (TL)</span>
@@ -163,31 +157,27 @@
     `;
 
     const setupForm = document.getElementById('setupForm');
-    setupForm.dataset.incomeMode = incomeMode;
+
+    const incomeList = document.getElementById('incomeList');
+    incomes.forEach(inc => addIncomeRow(incomeList, inc.mode, inc.amount));
+    updateIncomeTotal();
 
     const fixedList = document.getElementById('fixedList');
     if (fixed.length === 0) addFixedRow(fixedList);
     else fixed.forEach(f => addFixedRow(fixedList, f.name, f.amount));
 
-    const incomeInput = document.getElementById('income');
-    applyNumFmt(incomeInput);
     applyNumFmt(document.getElementById('savings'));
-    setIncomeMode(incomeMode);
 
-    document.querySelector('.income-switch').addEventListener('click', (e) => {
-      const btn = e.target.closest('.income-mode');
-      if (!btn) return;
-      setIncomeMode(btn.dataset.mode);
+    document.getElementById('addIncome').addEventListener('click', () => {
+      const row = addIncomeRow(incomeList, 'net');
+      row.querySelector('.inc-amount').focus();
     });
-
-    incomeInput.addEventListener('input', updateIncomePreview);
-    incomeInput.addEventListener('blur', updateIncomePreview);
 
     document.querySelector('.pct-chips').addEventListener('click', (e) => {
       const chip = e.target.closest('.pct-chip');
       if (!chip) return;
       const income = incomeForSavingsPercent();
-      if (!income) { alert('Önce aylık geliri girin.'); return; }
+      if (!income) { alert('Önce gelir girin.'); return; }
       const savings = Math.round(income * Number(chip.dataset.pct) / 100);
       const input = document.getElementById('savings');
       input.value = tlFmt.format(savings);
@@ -273,59 +263,90 @@
     });
   }
 
+  // Gelir satiri: Net/Brut toggle + tutar + sil. Brutte anlik net onizleme.
+  function addIncomeRow(container, mode, amount) {
+    const row = document.createElement('div');
+    row.className = 'income-row';
+    row.dataset.mode = mode === 'gross' ? 'gross' : 'net';
+    row.innerHTML = `
+      <div class="income-head">
+        <div class="inc-switch">
+          <button type="button" class="inc-mode" data-mode="net">Net</button>
+          <button type="button" class="inc-mode" data-mode="gross">Brüt</button>
+        </div>
+        <button type="button" class="inc-del" aria-label="Sil">×</button>
+      </div>
+      <input class="inc-amount" type="text" inputmode="numeric" placeholder="Aylık tutar (TL)" value="${amount > 0 ? tlFmt.format(amount) : ''}">
+      <small class="inc-preview hint"></small>
+    `;
+    row.querySelectorAll('.inc-mode').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === row.dataset.mode));
+
+    row.querySelector('.inc-switch').addEventListener('click', (e) => {
+      const btn = e.target.closest('.inc-mode');
+      if (!btn) return;
+      row.dataset.mode = btn.dataset.mode;
+      row.querySelectorAll('.inc-mode').forEach(b => b.classList.toggle('active', b === btn));
+      updateIncomeRowPreview(row);
+      updateIncomeTotal();
+    });
+
+    const amt = row.querySelector('.inc-amount');
+    applyNumFmt(amt);
+    amt.addEventListener('input', () => { updateIncomeRowPreview(row); updateIncomeTotal(); });
+    amt.addEventListener('blur', () => { updateIncomeRowPreview(row); updateIncomeTotal(); });
+
+    row.querySelector('.inc-del').addEventListener('click', () => {
+      if (container.querySelectorAll('.income-row').length > 1) {
+        row.remove();
+        updateIncomeTotal();
+      }
+    });
+
+    container.appendChild(row);
+    updateIncomeRowPreview(row);
+    return row;
+  }
+
+  function updateIncomeRowPreview(row) {
+    const preview = row.querySelector('.inc-preview');
+    const amount = parseAmount(row.querySelector('.inc-amount').value);
+    if (row.dataset.mode !== 'gross') {
+      preview.textContent = '';
+      return;
+    }
+    if (!amount) {
+      preview.textContent = 'Brütten 2026 SGK/vergi sonrası net hesaplanır.';
+      return;
+    }
+    const now = new Date();
+    const p = Payroll.computeMonthlyNet({ gross: amount, year: now.getFullYear(), month: now.getMonth() + 1 });
+    preview.textContent = `≈ net ${formatTL(p.net)} (${now.toLocaleDateString('tr-TR', { month: 'long' })})`;
+  }
+
+  function readIncomeRows() {
+    return [...document.querySelectorAll('.income-row')]
+      .map(r => ({
+        mode: r.dataset.mode === 'gross' ? 'gross' : 'net',
+        amount: parseAmount(r.querySelector('.inc-amount').value)
+      }))
+      .filter(i => i.amount > 0);
+  }
+
+  function updateIncomeTotal() {
+    const el = document.getElementById('incomeTotal');
+    if (!el) return;
+    const incomes = readIncomeRows();
+    if (!incomes.length) { el.textContent = ''; return; }
+    const totalNet = Budget.incomeForDate({ incomes }, new Date());
+    const hasGross = incomes.some(i => i.mode === 'gross');
+    const prefix = incomes.length > 1 || hasGross ? 'Toplam net gelir: ' : 'Aylık gelir: ';
+    el.textContent = prefix + formatTL(totalNet);
+  }
+
+  // Tasarruf yuzdesi toplam net gelir uzerinden.
   function incomeForSavingsPercent() {
-    const incomeInput = document.getElementById('income');
-    const amount = parseAmount(incomeInput.value);
-    if (currentIncomeMode() !== 'gross' || !amount) return amount;
-    const now = new Date();
-    return Payroll.computeMonthlyNet({
-      gross: amount,
-      year: now.getFullYear(),
-      month: now.getMonth() + 1
-    }).net;
-  }
-
-  function currentIncomeMode() {
-    return document.getElementById('setupForm').dataset.incomeMode || 'net';
-  }
-
-  function setIncomeMode(mode) {
-    const selected = mode === 'gross' ? 'gross' : 'net';
-    const setupForm = document.getElementById('setupForm');
-    setupForm.dataset.incomeMode = selected;
-
-    document.querySelectorAll('.income-mode').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.mode === selected);
-    });
-
-    document.getElementById('incomeLabel').textContent =
-      selected === 'gross' ? 'Aylık brüt gelir (TL)' : 'Aylık net gelir (TL)';
-    updateIncomePreview();
-  }
-
-  function updateIncomePreview() {
-    const preview = document.getElementById('incomePreview');
-    const incomeInput = document.getElementById('income');
-    if (!preview || !incomeInput) return;
-
-    if (currentIncomeMode() !== 'gross') {
-      preview.textContent = 'Bu tutar doğrudan aylık bütçeye gelir olarak kullanılır.';
-      return;
-    }
-
-    const gross = parseAmount(incomeInput.value);
-    if (!gross) {
-      preview.textContent = 'Brütte 2026 SGK, işsizlik, gelir vergisi ve damga vergisi tahmini uygulanır.';
-      return;
-    }
-
-    const now = new Date();
-    const p = Payroll.computeMonthlyNet({
-      gross,
-      year: now.getFullYear(),
-      month: now.getMonth() + 1
-    });
-    preview.textContent = `${now.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })} tahmini net: ${formatTL(p.net)}. Yıl başından beri aynı brüt varsayılır.`;
+    return Budget.incomeForDate({ incomes: readIncomeRows() }, new Date());
   }
 
   // Sablon ekle: bos bir satir varsa onu doldur, yoksa yeni satir ekle; tutara odaklan.
@@ -427,27 +448,24 @@
 
   async function onSaveSetup(e) {
     e.preventDefault();
-    const incomeInput = parseAmount(document.getElementById('income').value);
-    const incomeMode = currentIncomeMode();
+    const incomes = readIncomeRows();
     const savingsTarget = parseAmount(document.getElementById('savings').value);
     const salaryDay = 1; // Dönem her zaman ayın 1'inde başlar
 
-    if (incomeInput <= 0) { alert('Lütfen geçerli bir gelir girin.'); return; }
+    if (incomes.length === 0) { alert('Lütfen en az bir gelir girin.'); return; }
 
-    let settingsPatch = { incomeMode, savingsTarget, salaryDay };
-    if (incomeMode === 'gross') {
-      const now = new Date();
-      const payroll = Payroll.computeMonthlyNet({
-        gross: incomeInput,
-        year: now.getFullYear(),
-        month: now.getMonth() + 1
-      });
-      settingsPatch.grossIncome = incomeInput;
-      settingsPatch.income = Math.round(payroll.net); // Eski kayitlarla uyumluluk ve yedek gosterim.
-    } else {
-      settingsPatch.income = incomeInput;
-      settingsPatch.grossIncome = 0;
-    }
+    // Toplam net (geriye uyumlu income alani + isConfigured icin).
+    const totalNet = Math.round(Budget.incomeForDate({ incomes }, new Date()));
+
+    const settingsPatch = {
+      incomes,
+      income: totalNet,
+      savingsTarget,
+      salaryDay,
+      // Eski tekil alanlar artik kullanilmiyor; temizle.
+      incomeMode: incomes.length === 1 ? incomes[0].mode : 'mixed',
+      grossIncome: 0
+    };
 
     await DB.saveSettings(settingsPatch);
     await DB.replaceFixedExpenses(readFixedRows());

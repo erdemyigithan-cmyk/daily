@@ -94,6 +94,44 @@ body {
   background: var(--accent);
   color: #06120c;
 }
+
+/* Coklu gelir satiri */
+.income-row {
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius);
+  padding: 10px;
+  margin-bottom: 8px;
+}
+.income-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.inc-switch {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 3px;
+}
+.inc-mode {
+  background: transparent; border: none;
+  color: var(--muted);
+  font-size: 13px; font-weight: 700;
+  padding: 7px 20px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.inc-mode.active { background: var(--accent); color: #06120c; }
+.inc-del {
+  background: transparent; border: none;
+  color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer;
+}
+.inc-del:active { color: var(--danger); }
+.inc-amount { background: var(--surface-2); }
+.inc-preview { display: block; margin-top: 6px; }
+
 input, select {
   background: var(--surface);
   border: 1px solid var(--surface-2);

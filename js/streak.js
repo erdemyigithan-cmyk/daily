@@ -30,19 +30,20 @@
     return best;
   }
 
-  // expenses: [{ amount, ts }]; opts: { now, todaySpendable }
+  // expenses: [{ amount, ts }]; opts: { now, todaySpendable, frozenDays }
+  // frozenDays: zincir surekliligi icin "loglu" sayilacak gun anahtarlari (freeze jetonu).
   function compute(expenses, opts) {
     opts = opts || {};
     const now = opts.now || new Date();
     const todaySpendable = opts.todaySpendable;
 
-    const days = new Set();
-    for (const e of expenses || []) {
-      days.add(key(new Date(e.ts)));
-    }
+    const realDays = new Set();
+    for (const e of expenses || []) realDays.add(key(new Date(e.ts)));
+    const days = new Set(realDays);
+    for (const fd of opts.frozenDays || []) days.add(fd);
 
     const todayKey = key(now);
-    const todayLogged = days.has(todayKey);
+    const todayLogged = realDays.has(todayKey); // freeze "bugun loglu" yapmaz
 
     // current: bugunden (loglandiysa) yoksa dunden geriye, ardisik loglu gunler.
     let cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -53,11 +54,18 @@
       cursor.setDate(cursor.getDate() - 1);
     }
 
+    // cursor artik zincirin altindaki ilk bos gun (gap). Ondan onceki gun loglu ise
+    // bu bosluk bir freeze ile koprulenebilir (eski seriyle birlesir).
+    const gapKey = key(cursor);
+    const beforeGap = new Date(cursor);
+    beforeGap.setDate(beforeGap.getDate() - 1);
+    const bridgeableGap = (current > 0 && days.has(key(beforeGap))) ? gapKey : null;
+
     const riskToday = !todayLogged && current > 0;
     const best = Math.max(longestRun(days), current);
     const todayClean = todayLogged && todaySpendable != null && Number(todaySpendable) >= 0;
 
-    return { current, best, todayLogged, todayClean, riskToday };
+    return { current, best, todayLogged, todayClean, riskToday, bridgeableGap };
   }
 
   const api = { compute, longestRun, dayIndex };

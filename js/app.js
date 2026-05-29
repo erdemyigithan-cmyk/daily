@@ -600,11 +600,40 @@
     requestAnimationFrame(frame);
   }
 
+  // Bu ayin freeze (telafi) jetonunu yonet + streak'i hesapla.
+  // Ayda 1 telafi: tek gunluk bosluk zinciri kirmasin. Tek kalici state: settings.streakFreeze.
+  function computeStreakWithFreeze(todaySpendable) {
+    const now = new Date();
+    const month = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    let freeze = state.settings.streakFreeze;
+    let changed = false;
+    if (!freeze || freeze.month !== month) { freeze = { month, coveredDay: null }; changed = true; }
+
+    let frozenDays = freeze.coveredDay ? [freeze.coveredDay] : [];
+    let s = Streak.compute(state.expenses, { now, todaySpendable, frozenDays });
+
+    // Jeton boşsa ve köprülenebilir tek boşluk varsa tüket.
+    if (!freeze.coveredDay && s.bridgeableGap) {
+      freeze = { month, coveredDay: s.bridgeableGap };
+      frozenDays = [freeze.coveredDay];
+      s = Streak.compute(state.expenses, { now, todaySpendable, frozenDays });
+      changed = true;
+    }
+    if (changed) {
+      state.settings.streakFreeze = freeze;
+      DB.saveSettings({ streakFreeze: freeze }); // fire-and-forget
+    }
+    s.frozeUsed = !!freeze.coveredDay;
+    return s;
+  }
+
   // Hero altindaki streak gostergesi (yalniz bugun gorunumu).
   function streakHtml(s) {
     if (!s) return '';
     const best = s.best > s.current ? `<span class="streak-best">· rekor ${s.best}</span>` : '';
     let cls = 'streak';
+    if (s.current >= 30) cls += ' tier2';
+    else if (s.current >= 7) cls += ' tier1';
     let text;
     if (s.current === 0 && !s.riskToday) {
       text = 'Seriye başla — bugünkü harcamanı gir 🔥';
@@ -615,7 +644,8 @@
       if (s.todayClean) cls += ' clean';
       text = `🔥 ${s.current} gündür takipte`;
     }
-    return `<p class="${cls}">${text} ${best}</p>`;
+    const freeze = s.frozeUsed ? `<span class="streak-freeze">❄️ telafi kullanıldı</span>` : '';
+    return `<p class="${cls}">${text} ${best} ${freeze}</p>`;
   }
 
   // ---------- Alt tab bar ----------
@@ -655,9 +685,7 @@
     const dayTotal = dayExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
     const heroClass = viewingToday ? (over ? 'over' : '') : 'history';
-    const streak = viewingToday
-      ? Streak.compute(state.expenses, { now: new Date(), todaySpendable: r.spendableToday })
-      : null;
+    const streak = viewingToday ? computeStreakWithFreeze(r.spendableToday) : null;
 
     app.innerHTML = `
       <header class="head">

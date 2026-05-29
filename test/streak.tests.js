@@ -13,6 +13,11 @@
   function exp(daysAgo, amount) {
     return { amount: amount == null ? 100 : amount, ts: daysAgoTs(daysAgo) };
   }
+  // n gün önce için YYYY-MM-DD anahtarı
+  function dayKey(n) {
+    const d = new Date(2026, 4, 29 - n);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
 
   function defineTests(S) {
     return [
@@ -103,6 +108,38 @@
           const r = S.compute([exp(0, 50), exp(0, 70), exp(1, 30)], { now: NOW, todaySpendable: 10 });
           return [
             ['current=2', r.current === 2]
+          ];
+        }
+      },
+      {
+        name: 'I) Tek boşluk köprülenebilir: bugün+2gün önce+3gün önce, dün boş',
+        run() {
+          // loglu: 0,2,3 — 1 (dün) eksik. bridgeableGap = dün.
+          const r = S.compute([exp(0), exp(2), exp(3)], { now: NOW, todaySpendable: 10 });
+          return [
+            ['current=1 (freeze yok)', r.current === 1],
+            ['bridgeableGap=dün', r.bridgeableGap === dayKey(1)]
+          ];
+        }
+      },
+      {
+        name: 'J) Freeze ile boşluk köprülenir -> zincir sürer (current=4)',
+        run() {
+          const r = S.compute([exp(0), exp(2), exp(3)], { now: NOW, todaySpendable: 10, frozenDays: [dayKey(1)] });
+          return [
+            ['current=4 (0,1*,2,3)', r.current === 4],
+            ['todayLogged (freeze bugünü saymaz ama bugün gerçek)', r.todayLogged === true]
+          ];
+        }
+      },
+      {
+        name: 'K) İki boşluk köprülenemez: bugün+3+4, 1 ve 2 boş',
+        run() {
+          // walk: bugün(1), 1 gün önce boş -> gap=1gün önce, beforeGap=2gün önce de boş -> null
+          const r = S.compute([exp(0), exp(3), exp(4)], { now: NOW, todaySpendable: 10 });
+          return [
+            ['current=1', r.current === 1],
+            ['bridgeableGap=null (tek freeze yetmez)', r.bridgeableGap === null]
           ];
         }
       }

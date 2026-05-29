@@ -471,7 +471,13 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 }
 .streak.clean { color: var(--accent); font-weight: 600; }
 .streak.risk { color: var(--text); }
+.streak.tier1 { color: var(--accent); }
+.streak.tier2 {
+  color: var(--accent); font-weight: 700;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 40%, transparent);
+}
 .streak-best { color: var(--muted); font-size: 12px; }
+.streak-freeze { color: var(--muted); font-size: 12px; }
 
 .balance {
   display: flex; align-items: center; justify-content: space-between;

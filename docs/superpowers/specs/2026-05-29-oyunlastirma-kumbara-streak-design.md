@@ -14,6 +14,22 @@ günlük bütçe). Sosyal/lider tablosu/paylaşım yok.
 - **A) Tasarruf Kumbarası** (kavanoz görseli) — eski "kumbara" + "günlük artış" fikirleri tek mekanikte.
 - **B) Streak Yükseltmesi** — kilometre taşları + aylık freeze (telafi) jetonu.
 
+## Navigasyon / bilgi mimarisi (yeni)
+
+Kurulum tamamlandıktan sonraki ana akış **alt tab bar** ile 3 sekmeye ayrılır:
+
+- 🧮 **Bugün** — VARSAYILAN açılış. Şu anki ekran aynen: gün gezgini, hero (count-up),
+  streak satırı, kümülatif bakiye satırı, numpad, harcama listesi. Hesap-makinesi hissi korunur.
+- 📊 **İstatistik** — mevcut istatistik ekranı. Header'daki 📊 butonu ve "‹ geri" tuşu KALKAR;
+  yerini alt sekme alır.
+- 🫙 **Kumbara** — animasyonlu tasarruf kavanozu (Özellik A). İleride başka ilerleme/kutlama
+  animasyonları için ev.
+
+- **Üst sağdaki ⚙ kalır** (Kurulumu düzenle · CSV · JSON yedek · içe aktar) — sekme değil.
+- **Kurulum ekranında alt bar YOK** (tam ekran). Alt bar yalnız 3 ana sekmede görünür.
+- Aktif sekme bir `activeTab` durumunda tutulur; her ana ekran kendi içeriğini + sabit alt barı çizer.
+- **Streak göstergesi Bugün sekmesinde kalır** (hero altında, günlük dürtü).
+
 ## İlkeler / kısıtlar
 
 - Vanilla, build yok, bağımlılık yok. Saf hesap modülleri ayrı dosyada, test edilebilir.
@@ -56,23 +72,22 @@ todayContrib   = gunlukPay - spentToday     // "bugün +X" başlığı için
 - Doğrulama (örnek: hedef 6.000, V=15.000, N=30 → gunlukPay=700):
   - Gün1 spent0 → saved 700 · Gün2 spent500 → 900 · Gün3 spent1200 → 900. ✓
 
-### Görsel
+### Görsel — Kumbara sekmesi (`renderKumbara`)
 
-`renderMain`'deki mevcut `.balance` ("Kümülatif bakiye") satırı, tasarruf hedefi > 0 ise
-şu bileşik bloğa dönüşür:
+Kavanoz, **Bugün** ekranında değil, kendi **Kumbara sekmesinde** yaşar. Bugün ekranındaki
+"Kümülatif bakiye" satırı olduğu gibi kalır (değişmez).
 
-- **Solda kavanoz**: dikey, alttan yukarı `--accent` gradyanla `pct` yüksekliğine dolar.
-- **Sağda iki satır**:
-  - Birincil: `Bu ay biriken: {saved} / {target} TL`
-  - İkincil (küçük, muted): `Kümülatif +{cumulativeBalance} TL` (korunur)
-- Doluluk değişince kavanoz **height transition** (~500ms ease-out) ile yumuşak dolar.
-- `todayContrib > 0` ise kavanozun altında kısa micro-başlık: `bugün +{todayContrib} TL` (opsiyonel cila).
+Kumbara sekmesi içeriği (tasarruf hedefi > 0 ise):
+- **Büyük kavanoz**: dikey, alttan yukarı `--accent` gradyanla `pct` yüksekliğine dolar.
+- Altında: `Bu ay biriken: {saved} / {target} TL` (birincil) + `Kümülatif +{cumulativeBalance} TL` (küçük, muted).
+- Sekmeye her girişte kavanoz **height transition** (~500ms ease-out) ile mevcut değere dolar.
+- `todayContrib > 0` ise kısa micro-başlık: `bugün +{todayContrib} TL`.
 - `overflow` → kavanoz dolu + hafif glow + `✨ hedefin %X üstünde` etiketi.
 - `prefers-reduced-motion` → transition yok, anında.
-- Tasarruf hedefi 0 → kavanoz yok, mevcut sade "Kümülatif bakiye +X" satırı aynen kalır.
+- **Tasarruf hedefi 0** → sekme içeriği boş-durum mesajı: "Tasarruf hedefi belirlersen
+  burada kumbaran dolmaya başlar" + Kurulumu düzenle kısayolu. (Kavanoz yok.)
 
-Yalnızca **bugün görünümünde** gösterilir (geçmiş gün gezgininde değil), mevcut streak
-satırıyla tutarlı.
+Hesap güncel gerçek güne göredir (gün gezgininden bağımsız; Kumbara sekmesinde gezgin yok).
 
 ---
 
@@ -115,11 +130,19 @@ Notlar:
 ## Dokunulan dosyalar
 
 - **Yeni:** `js/savings.js` (saf), `test/savings.test.html` + `test/savings.tests.js`.
-- **Değişen:** `js/streak.js` (frozenDays girdisi), `js/app.js` (renderMain: kumbara + streak
-  yükseltme + freeze tüketme), `css/styles.css` (kavanoz + streak kademe + freeze), `index.html`
-  (savings.js script), `service-worker.js` (ASSETS + cache sürümü artır).
-- **Değişmeyen:** `js/budget.js`, `js/payroll.js`, `js/stats.js`, `js/db.js` (yalnız
-  `settings.streakFreeze` alanı eklenir — şema değişmez, opsiyonel alan).
+- **Değişen:**
+  - `js/app.js`:
+    - Alt tab bar + `activeTab` durumu; 3 ana ekranda sabit bar, kurulumda yok.
+    - `renderMain` (Bugün): header'dan 📊 kalkar; streak + count-up korunur.
+    - `renderStats`: header'daki "‹ geri" kalkar (alt sekme yönetir).
+    - `renderKumbara` (yeni): animasyonlu kavanoz + tasarruf ilerlemesi + boş-durum.
+    - Freeze tüketme mantığı (persist) + streak satırına `❄️` ibaresi.
+  - `css/styles.css`: alt tab bar, kavanoz, streak kademe + freeze, kumbara boş-durum.
+  - `js/streak.js`: `frozenDays` girdisi.
+  - `index.html`: `savings.js` script.
+  - `service-worker.js`: ASSETS + cache sürümü artır.
+- **Değişmeyen:** `js/budget.js`, `js/payroll.js`, `js/stats.js` (hesap çıktısı aynen kullanılır),
+  `js/db.js` (yalnız `settings.streakFreeze` opsiyonel alanı eklenir — şema değişmez).
 
 ## Test
 

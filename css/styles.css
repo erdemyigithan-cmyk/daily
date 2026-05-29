@@ -59,6 +59,8 @@ body {
 
 /* Form */
 .form { display: flex; flex-direction: column; gap: 18px; }
+.setup-form { flex: 1; overflow-y: auto; padding-bottom: 4px; }
+.setup-save { flex-shrink: 0; margin-top: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span { font-size: 14px; color: var(--muted); font-weight: 600; }
 .hint { font-size: 12px; color: var(--muted); }
@@ -126,15 +128,25 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 
 /* Sablon secici */
 .presets-wrap { margin-top: 14px; }
-.preset-group { margin-top: 12px; }
-.preset-cat {
-  font-size: 12px; font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
+.preset-group { margin-top: 8px; }
+.preset-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface-2);
+  border: none;
+  color: var(--text);
+  font-size: 14px; font-weight: 600;
+  padding: 11px 14px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
 }
-.preset-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.preset-toggle:active { opacity: 0.75; }
+.preset-chevron { color: var(--muted); font-size: 13px; }
+.preset-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 4px 2px; }
+.preset-chips[hidden] { display: none; }
 .chip {
   background: var(--surface-2);
   border: none;

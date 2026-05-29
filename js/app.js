@@ -57,8 +57,10 @@
   function buildPresetsHTML() {
     return PRESETS.map(group => `
       <div class="preset-group">
-        <div class="preset-cat">${group.cat}</div>
-        <div class="preset-chips">
+        <button type="button" class="preset-toggle">
+          <span>${group.cat}</span><span class="preset-chevron">▸</span>
+        </button>
+        <div class="preset-chips" hidden>
           ${group.items.map(name =>
             `<button type="button" class="chip" data-name="${escapeAttr(name)}">+ ${name}</button>`
           ).join('')}
@@ -72,7 +74,7 @@
 
     app.innerHTML = `
       <header class="head"><h1>Kurulum</h1></header>
-      <form id="setupForm" class="form">
+      <form id="setupForm" class="form setup-form">
         <label class="field">
           <span>Aylık net gelir (TL)</span>
           <input id="income" type="text" inputmode="numeric"
@@ -95,13 +97,12 @@
           <div id="fixedList"></div>
           <button type="button" id="addFixed" class="btn-ghost">+ Boş satır ekle</button>
           <div class="presets-wrap">
-            <small class="hint">Hazır şablon: dokun, tutarı gir.</small>
+            <small class="hint">Hazır şablon: kategoriye dokun, açılır.</small>
             <div id="presets">${buildPresetsHTML()}</div>
           </div>
         </div>
-
-        <button type="submit" class="btn-primary" id="saveBtn">Kaydet</button>
       </form>
+      <button type="submit" form="setupForm" class="btn-primary setup-save" id="saveBtn">Kaydet</button>
     `;
 
     const fixedList = document.getElementById('fixedList');
@@ -131,6 +132,14 @@
     document.getElementById('setupForm').addEventListener('submit', onSaveSetup);
 
     document.getElementById('presets').addEventListener('click', (e) => {
+      const toggle = e.target.closest('.preset-toggle');
+      if (toggle) {
+        const chipsEl = toggle.nextElementSibling;
+        const chevron = toggle.querySelector('.preset-chevron');
+        chipsEl.hidden = !chipsEl.hidden;
+        chevron.textContent = chipsEl.hidden ? '▸' : '▾';
+        return;
+      }
       const chip = e.target.closest('.chip');
       if (!chip) return;
       addPreset(fixedList, chip.dataset.name);

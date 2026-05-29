@@ -454,29 +454,118 @@
       .filter(f => f.name !== '' || f.amount > 0);
   }
 
+  // 'YYYY-MM-DD' veya Date -> donem basi 'YYYY-MM-01'
+  function periodStartISO(dateStr) {
+    const s = (dateStr instanceof Date)
+      ? dateStr.getFullYear() + '-' + String(dateStr.getMonth() + 1).padStart(2, '0')
+      : String(dateStr).slice(0, 7);
+    return s + '-01';
+  }
+
+  // Snapshot karsilastirma anahtari (sira/format bagimsiz)
+  function snapKey(snap) {
+    const incs = (snap.incomes || []).map(i => (i.mode === 'gross' ? 'g' : 'n') + (Number(i.amount) || 0)).join('|');
+    const fx = [...(snap.fixed || [])]
+      .map(f => ({ n: (f.name || '').trim(), a: Number(f.amount) || 0 }))
+      .sort((a, b) => a.n.localeCompare(b.n))
+      .map(f => f.n + ':' + f.a).join('|');
+    return incs + '#' + (Number(snap.savingsTarget) || 0) + '#' + fx;
+  }
+
+  function upsertSnapshot(history, snap) {
+    const idx = history.findIndex(h => h.from === snap.from);
+    if (idx >= 0) history[idx] = snap;
+    else history.push(snap);
+    history.sort((a, b) => a.from.localeCompare(b.from)); // ISO string = kronolojik
+  }
+
+  // Kaydederken "hangi aydan itibaren" sec. 'YYYY-MM-01' veya null (iptal) doner.
+  function chooseEffectiveMonth(startPeriod, curPeriod) {
+    return new Promise((resolve) => {
+      const def = curPeriod.slice(0, 7);
+      const overlay = document.createElement('div');
+      overlay.className = 'sheet-overlay';
+      overlay.innerHTML = `
+        <div class="sheet" role="dialog" aria-modal="true">
+          <div class="sheet-handle"></div>
+          <div class="eff-sheet">
+            <strong>Değişiklik hangi aydan itibaren geçerli?</strong>
+            <p class="plan-hint">Seçtiğin aydan önceki dönemler eski değerlerle kalır.</p>
+            <input id="effMonth" type="month" value="${def}" min="${startPeriod.slice(0, 7)}" max="${def}">
+            <div class="edit-btns">
+              <button type="button" class="edit-save" id="effOk">Uygula</button>
+              <button type="button" class="edit-cancel" id="effCancel">İptal</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const close = (v) => { overlay.remove(); resolve(v); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.closest('#effCancel')) close(null);
+      });
+      overlay.querySelector('#effOk').addEventListener('click', () => {
+        const m = overlay.querySelector('#effMonth').value || def;
+        close(m + '-01');
+      });
+    });
+  }
+
   async function onSaveSetup(e) {
     e.preventDefault();
     const incomes = readIncomeRows();
     const savingsTarget = parseAmount(document.getElementById('savings').value);
+    const fixed = readFixedRows();
     const salaryDay = 1; // Dönem her zaman ayın 1'inde başlar
 
     if (incomes.length === 0) { alert('Lütfen en az bir gelir girin.'); return; }
 
-    // Toplam net (geriye uyumlu income alani + isConfigured icin).
-    const totalNet = Math.round(Budget.incomeForDate({ incomes }, new Date()));
+    const existing = state.settings || {};
+    const configured = isConfigured();
+    const startPeriod = periodStartISO(existing.startDate || todayStr());
+    const curPeriod = periodStartISO(todayStr());
+    const curDate = new Date(curPeriod + 'T00:00:00');
 
-    const settingsPatch = {
-      incomes,
+    // Mevcut tarihli gecmis; yoksa eski tek-config'i baslangic donemine muhurle.
+    let history = Array.isArray(existing.history) ? existing.history.map(h => ({ ...h })) : [];
+    if (!history.length && configured) {
+      history.push({
+        from: startPeriod,
+        incomes: Budget.normalizeIncomes(existing),
+        savingsTarget: Number(existing.savingsTarget) || 0,
+        fixed: (state.fixed || []).map(f => ({ name: f.name, amount: f.amount }))
+      });
+    }
+
+    const newSnap = { incomes, savingsTarget, fixed };
+
+    if (!history.length) {
+      // Ilk kurulum: tek snapshot, baslangic doneminden gecerli.
+      history = [{ from: startPeriod, ...newSnap }];
+    } else {
+      // Bu donemde gecerli config ile karsilastir; degistiyse ay sor.
+      const curCfg = Budget.configForPeriod({ history }, curDate) || {};
+      if (snapKey(newSnap) !== snapKey(curCfg)) {
+        const effFrom = await chooseEffectiveMonth(startPeriod, curPeriod);
+        if (effFrom === null) return; // iptal: kaydetme
+        upsertSnapshot(history, { from: effFrom, ...newSnap });
+      }
+      // degisiklik yoksa history'e dokunma
+    }
+
+    // Bugun icin gecerli "canli" config -> UI/top-level alanlara yansir.
+    const live = Budget.configForPeriod({ history }, curDate) || newSnap;
+    const totalNet = Math.round(Budget.incomeForDate({ incomes: live.incomes }, new Date()));
+
+    await DB.saveSettings({
+      history,
+      incomes: live.incomes,
       income: totalNet,
-      savingsTarget,
-      salaryDay,
-      // Eski tekil alanlar artik kullanilmiyor; temizle.
-      incomeMode: incomes.length === 1 ? incomes[0].mode : 'mixed',
-      grossIncome: 0
-    };
-
-    await DB.saveSettings(settingsPatch);
-    await DB.replaceFixedExpenses(readFixedRows());
+      savingsTarget: live.savingsTarget,
+      incomeMode: live.incomes.length === 1 ? live.incomes[0].mode : 'mixed',
+      grossIncome: 0,
+      salaryDay
+    });
+    await DB.replaceFixedExpenses(live.fixed);
     await loadAll();
     renderMain();
   }

@@ -38,16 +38,17 @@ kümülatif bakiye göstergesi · harcama listesi + silme · offline + kurulabil
 Kategoriler, grafikler, çoklu profil, dışa aktarma, oyunlaştırma, bildirimler,
 çoklu para birimi, bulut yedek, ayar geçmişi.
 
-## Bilinen V1 Sınırı
-Ayar geçmişi tutulmaz. Gelir/sabit gider/tasarruf değişirse geçmiş dönemler
-GÜNCEL ayarlarla yeniden hesaplanır. Prototip için kabul; v2'de ayar geçmişi.
+## Ayar geçmişi (tarihli snapshot) — EKLENDİ
+Gelir/sabit gider/tasarruf değişince geçmiş dönemler ESKİ değerle hesaplanır.
+`settings.history = [{ from:'YYYY-MM-01', incomes, savingsTarget, fixed }]` (artan sıralı).
+`budget.js > configForPeriod` her dönemde geçerli snapshot'ı seçer; rollover de buna
+göre akar. Kaydederken "hangi aydan itibaren geçerli" sorulur (değişiklik varsa).
+History yoksa eski tek-config davranışına düşer (geriye uyumlu).
 
 ## v2 Fikirleri (sadece not, uygulama)
-- Ayar geçmişi: gelir/sabit gider değişince geçmiş dönemleri eski değerle hesapla.
-- Aylık özet / basit grafik.
-- Harcamaya opsiyonel not/etiket.
-- Veri dışa/içe aktarma (JSON yedek) — offline kalır.
 - Tasarruf hedefine ulaşma göstergesi.
+- Harcamaya kategori/etiket (şu an yalnız serbest not var).
+- Geçmiş ayar snapshot'larını görüntüleme/düzenleme ekranı.
 
 ## Yerel Test
 - Sunucu: `python3 -m http.server 8000` → http://localhost:8000

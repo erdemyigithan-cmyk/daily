@@ -532,6 +532,11 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .sheet-item:active { background: var(--surface-2); }
 .sheet-icon { font-size: 20px; width: 28px; text-align: center; }
 
+/* Geçerlilik ayı seçici */
+.eff-sheet { padding: 4px 20px 8px; display: flex; flex-direction: column; gap: 10px; }
+.eff-sheet strong { font-size: 16px; }
+.eff-sheet input[type="month"] { width: 100%; }
+
 .entry-date {
   color: var(--muted);
   font-size: 13px;

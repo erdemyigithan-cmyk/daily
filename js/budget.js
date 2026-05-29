@@ -98,24 +98,56 @@
     return [{ mode: 'net', amount: Number(settings && settings.income) || 0 }];
   }
 
-  // Verilen ay icin toplam NET gelir. Brut gelirler AYRI AYRI bordrodan cevrilir
-  // (TR gelir vergisi kisi basi kumulatif/artan oranli; toplayip tek hesap yanlis olur).
-  function incomeForDate(settings, date) {
-    const list = normalizeIncomes(settings);
+  // Bir gelir listesinin verilen ay icin toplam NET'i. Brut gelirler AYRI AYRI
+  // bordrodan cevrilir (TR gelir vergisi kisi basi kumulatif; toplayip tek hesap yanlis).
+  function incomeNetForList(incomes, date) {
     const payroll = getPayroll();
     let total = 0;
-    for (const inc of list) {
-      if (inc.mode === 'gross' && payroll && inc.amount > 0) {
+    for (const inc of incomes || []) {
+      const amount = Number(inc.amount) || 0;
+      if (inc.mode === 'gross' && payroll && amount > 0) {
         total += payroll.computeMonthlyNet({
-          gross: inc.amount,
+          gross: amount,
           year: date.getFullYear(),
           month: date.getMonth() + 1
         }).net;
       } else {
-        total += inc.amount;
+        total += amount;
       }
     }
     return total;
+  }
+
+  function incomeForDate(settings, date) {
+    return incomeNetForList(normalizeIncomes(settings), date);
+  }
+
+  // Tarihli ayar gecmisi: bir donemde gecerli olan snapshot'i sec.
+  // history = [{ from:'YYYY-MM-01', incomes, savingsTarget, fixed }] (from'a gore artan sirali)
+  function configForPeriod(settings, periodStart) {
+    const history = settings && settings.history;
+    if (!Array.isArray(history) || !history.length) return null;
+    const pIdx = monthIndex(periodStart);
+    let chosen = history[0]; // donem ilk snapshot'tan onceyse en erken bilineni kullan
+    for (const h of history) {
+      if (monthIndex(parseLocalDate(h.from)) <= pIdx) chosen = h;
+      else break;
+    }
+    return chosen;
+  }
+
+  // Bir donemin degisken butcesi V = net gelir - sabit gider - tasarruf.
+  // Once o donemde gecerli snapshot; yoksa (eski kayit) guncel ayar + verilen sabit liste.
+  function variableBudgetForPeriod(settings, fixedExpenses, periodStart) {
+    const cfg = configForPeriod(settings, periodStart);
+    if (cfg) {
+      return incomeNetForList(cfg.incomes || [], periodStart)
+        - sumFixed(cfg.fixed || [])
+        - (Number(cfg.savingsTarget) || 0);
+    }
+    return incomeForDate(settings, periodStart)
+      - sumFixed(fixedExpenses)
+      - (Number(settings.savingsTarget) || 0);
   }
 
   // [from, to) araliginda yapilan degisken harcamalarin toplami.
@@ -147,24 +179,25 @@
   function computeBudget(settings, fixedExpenses, expenses, now) {
     now = now || new Date();
     const salaryDay = Number(settings.salaryDay);
-    const savings = Number(settings.savingsTarget) || 0;
 
     const periodStart = periodStartFor(now, salaryDay);
     const periodEnd = nextPeriodStart(periodStart, salaryDay);
-    const fixedTotal = sumFixed(fixedExpenses);
-    const currentIncome = incomeForDate(settings, periodStart);
-    const V = currentIncome - fixedTotal - savings; // mevcut donem degisken butcesi
+    // Mevcut donemde gecerli gelir + degisken butce (tarihli gecmis varsa ondan).
+    const curCfg = configForPeriod(settings, periodStart);
+    const currentIncome = curCfg ? incomeNetForList(curCfg.incomes || [], periodStart) : incomeForDate(settings, periodStart);
+    const V = variableBudgetForPeriod(settings, fixedExpenses, periodStart);
 
     const startDate = settings.startDate ? parseLocalDate(settings.startDate) : now;
 
     // Tamamlanmis donemleri yur: rollover = toplam(tahakkuk eden butce - harcanan).
-    // Ilk donem, startDate donem ortasindaysa orantilidir.
+    // Her donem, o donemde gecerli ayarla hesaplanir (gelir/gider degisikligi
+    // yalniz degisiklikten sonraki donemleri etkiler).
     let rolloverIn = 0;
     let p = periodStartFor(startDate, salaryDay);
     while (monthIndex(p) < monthIndex(periodStart)) {
       const pEnd = nextPeriodStart(p, salaryDay);
       const aStart = maxDate(p, startDate);
-      const periodV = incomeForDate(settings, p) - fixedTotal - savings;
+      const periodV = variableBudgetForPeriod(settings, fixedExpenses, p);
       rolloverIn += periodBudget(periodV, p, pEnd, aStart) - sumExpensesInRange(expenses, aStart, pEnd);
       p = pEnd;
     }
@@ -214,7 +247,10 @@
     clampDay,
     lastDayOfMonth,
     incomeForDate,
+    incomeNetForList,
     normalizeIncomes,
+    configForPeriod,
+    variableBudgetForPeriod,
     sumFixed,
     sumExpensesInRange
   };

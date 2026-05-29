@@ -60,8 +60,14 @@ body {
 
 /* Form */
 .form { display: flex; flex-direction: column; gap: 18px; }
-.setup-form { flex: 1; overflow-y: auto; padding-bottom: 4px; }
-.setup-save { flex-shrink: 0; margin-top: 12px; }
+.setup-form { padding-bottom: 4px; }
+/* Belge kayarken Kaydet hep ekranin altinda kalir (sticky) */
+.setup-save {
+  position: sticky;
+  bottom: 16px;
+  margin-top: 16px;
+  box-shadow: 0 6px 22px rgba(2, 8, 6, 0.55);
+}
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span { font-size: 14px; color: var(--muted); font-weight: 600; }
 .hint { font-size: 12px; color: var(--muted); }

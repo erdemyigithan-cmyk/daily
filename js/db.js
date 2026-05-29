@@ -90,15 +90,25 @@
     return tx('expenses', 'readonly', s => reqToPromise(s.getAll()));
   }
 
-  function addExpense(amount, note, ts, source) {
+  function addExpense(amount, note, ts, source, inst) {
     const rec = { amount: Number(amount), ts: ts || new Date().toISOString() };
     if (note) rec.note = String(note).trim();
     if (source === 'meal') rec.source = 'meal'; // varsayilan 'cash' (alan yok)
+    if (inst) rec.inst = inst; // { id, k, n } taksit metadata
     return tx('expenses', 'readwrite', s => reqToPromise(s.add(rec)));
   }
 
   function deleteExpense(id) {
     return tx('expenses', 'readwrite', s => reqToPromise(s.delete(id)));
+  }
+
+  // Bir taksitli alisverisin tum taksitlerini sil (gecmis + gelecek).
+  function deleteInstallment(instId) {
+    return tx('expenses', 'readonly', s => reqToPromise(s.getAll()))
+      .then(all => {
+        const ids = all.filter(r => r.inst && r.inst.id === instId).map(r => r.id);
+        return tx('expenses', 'readwrite', s => { for (const id of ids) s.delete(id); });
+      });
   }
 
   function updateExpense(id, amount, note, ts) {
@@ -120,6 +130,7 @@
         const rec = { amount: Number(item.amount), ts: item.ts };
         if (item.note) rec.note = String(item.note);
         if (item.source === 'meal') rec.source = 'meal';
+        if (item.inst) rec.inst = item.inst;
         s.add(rec);
       }
     });
@@ -133,6 +144,7 @@
     getExpenses,
     addExpense,
     deleteExpense,
+    deleteInstallment,
     updateExpense,
     replaceExpenses
   };

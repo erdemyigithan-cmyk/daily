@@ -1,4 +1,4 @@
-const CACHE = 'gunluk-harcama-v21';
+const CACHE = 'gunluk-harcama-v22';
 const ASSETS = [
   './',
   './index.html',

@@ -730,6 +730,7 @@
     const heroClass = viewingToday ? (over ? 'over' : '') : 'history';
     const streak = viewingToday ? computeStreakWithFreeze(r.spendableToday) : null;
     const meal = viewingToday ? mealCardInfo() : null;
+    const inst = viewingToday ? installmentSummary() : null;
 
     app.innerHTML = `
       <header class="head">
@@ -770,6 +771,15 @@
         </span>
       </section>` : ''}
 
+      ${inst ? `
+      <section class="balance instcard">
+        <span>📅 Taksitler</span>
+        <span class="mealcard-right">
+          <strong>bu ay ${formatTL(inst.thisMonth)}</strong>
+          ${inst.upcomingCount > 0 ? `<small>${inst.upcomingCount} ödeme kaldı · ${formatTL(inst.upcomingTotal)}</small>` : ''}
+        </span>
+      </section>` : ''}
+
       <section class="entry">
         <div class="quick">
           ${QUICK_AMOUNTS.map(a => `<button class="quick-btn" data-amt="${a}">+${a}</button>`).join('')}
@@ -788,6 +798,7 @@
           <button class="np" data-d="0">0</button>
           <button class="np np-add" id="add">Ekle</button>
         </div>
+        ${entrySource === 'meal' ? '' : '<button type="button" id="taksitBtn" class="btn-ghost taksit-btn">Taksitlendir</button>'}
       </section>
 
       <section class="list">
@@ -797,7 +808,7 @@
              <button type="button" id="noSpend" class="btn-ghost btn-ghost-accent nospend-btn">Harcama yapmadım ✓</button>`
           : dayExpenses.map(e => `
             <div class="exp-row ${e.source === 'meal' ? 'meal' : ''}" data-id="${e.id}">
-              <span class="exp-amt">${Number(e.amount) === 0 ? '<span class="exp-zero">Harcama yok</span>' : formatTL(e.amount)}${e.source === 'meal' ? ' <span class="exp-badge">🍽️</span>' : ''}</span>
+              <span class="exp-amt">${Number(e.amount) === 0 ? '<span class="exp-zero">Harcama yok</span>' : formatTL(e.amount)}${e.source === 'meal' ? ' <span class="exp-badge">🍽️</span>' : ''}${e.inst ? ' <span class="exp-badge">📅</span>' : ''}</span>
               <span class="exp-meta">${e.note ? `<span class="exp-note">${escapeAttr(e.note)}</span>` : ''}<span class="exp-time">${formatWhen(e.ts)}</span></span>
               <button class="exp-del" data-id="${e.id}" aria-label="Sil">×</button>
             </div>`).join('')}
@@ -850,8 +861,24 @@
     const noSpend = document.getElementById('noSpend');
     if (noSpend) noSpend.addEventListener('click', () => addExpenseAndRefresh(0, '', dateToTs(selectedDate), 'cash'));
 
+    const taksitBtn = document.getElementById('taksitBtn');
+    if (taksitBtn) taksitBtn.addEventListener('click', async () => {
+      if (draft <= 0) { alert('Önce tutarı gir.'); return; }
+      const note = document.getElementById('noteInput').value.trim();
+      const n = await chooseInstallments(draft);
+      if (n) await addInstallmentsAndRefresh(draft, note, n);
+    });
+
     app.querySelectorAll('.exp-del').forEach(b =>
-      b.addEventListener('click', () => deleteExpenseAndRefresh(Number(b.dataset.id))));
+      b.addEventListener('click', () => {
+        const id = Number(b.dataset.id);
+        const e = state.expenses.find(x => x.id === id);
+        if (e && e.inst) {
+          if (confirm('Bu taksitli alışverişin tüm taksitleri silinsin mi?')) deleteInstallmentAndRefresh(e.inst.id);
+        } else {
+          deleteExpenseAndRefresh(id);
+        }
+      }));
 
     app.querySelectorAll('.exp-row').forEach(row =>
       row.addEventListener('click', ev => {
@@ -923,8 +950,84 @@
     return { balance: totalLoaded - totalSpent, monthlyLoad: load, thisMonthSpent, provider: mc.provider };
   }
 
+  // Taksit ozeti: bu ayki taksit odemesi + gelecek aylardaki kalan taksitler.
+  function installmentSummary() {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+    const inst = state.expenses.filter(e => e.inst);
+    if (!inst.length) return null;
+    const sum = arr => arr.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const thisMonth = sum(inst.filter(e => { const t = +new Date(e.ts); return t >= monthStart && t < nextMonthStart; }));
+    const upcoming = inst.filter(e => +new Date(e.ts) >= nextMonthStart);
+    if (thisMonth === 0 && upcoming.length === 0) return null;
+    return { thisMonth, upcomingCount: upcoming.length, upcomingTotal: sum(upcoming) };
+  }
+
+  // Taksit secim sheet'i. Secilen taksit sayisini (n) ya da null (iptal) doner.
+  function chooseInstallments(total) {
+    return new Promise((resolve) => {
+      const counts = [2, 3, 4, 6, 9, 12];
+      const overlay = document.createElement('div');
+      overlay.className = 'sheet-overlay';
+      overlay.innerHTML = `
+        <div class="sheet" role="dialog" aria-modal="true">
+          <div class="sheet-handle"></div>
+          <div class="inst-sheet">
+            <strong>${formatTL(total)} — kaç aya bölelim?</strong>
+            <p class="plan-hint">Taksitli: bu ay bütçenden sadece aylık tutar düşer, kalanı sonraki aylara yayılır. Tek seferlik istersen iptal et, "Ekle"yi kullan.</p>
+            <div class="inst-options">
+              ${counts.map(n => `
+                <button type="button" class="inst-option" data-n="${n}">
+                  <span>${n} ay</span><strong>aylık ${formatTL(Math.round(total / n))}</strong>
+                </button>`).join('')}
+            </div>
+            <button type="button" class="edit-cancel" id="instCancel">İptal</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const close = (v) => { overlay.remove(); resolve(v); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.closest('#instCancel')) { close(null); return; }
+        const opt = e.target.closest('.inst-option');
+        if (opt) close(Number(opt.dataset.n));
+      });
+    });
+  }
+
+  // Taksitli harcama olustur: n kayit (bu ay + sonraki n-1 ay), ortak instId.
+  async function addInstallmentsAndRefresh(total, note, n) {
+    const id = 'i' + Date.now();
+    const base = Math.floor(total / n);
+    const now = new Date();
+    const day = now.getDate();
+    for (let k = 1; k <= n; k++) {
+      const amount = (k === n) ? total - base * (n - 1) : base; // artik son taksite
+      let ts;
+      if (k === 1) {
+        ts = dateToTs(selectedDate); // bu ayki taksit: secili gun (genelde bugun)
+      } else {
+        const d = new Date(now.getFullYear(), now.getMonth() + (k - 1), 1);
+        const clampedDay = Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate());
+        d.setDate(clampedDay);
+        d.setHours(12, 0, 0, 0);
+        ts = d.toISOString();
+      }
+      const kNote = (note ? note + ' ' : '') + `(${k}/${n})`;
+      await DB.addExpense(amount, kNote, ts, 'cash', { id, k, n });
+    }
+    state.expenses = await DB.getExpenses();
+    renderMain(selectedDate);
+  }
+
   async function deleteExpenseAndRefresh(id) {
     await DB.deleteExpense(id);
+    state.expenses = await DB.getExpenses();
+    renderMain(selectedDate);
+  }
+
+  async function deleteInstallmentAndRefresh(instId) {
+    await DB.deleteInstallment(instId);
     state.expenses = await DB.getExpenses();
     renderMain(selectedDate);
   }

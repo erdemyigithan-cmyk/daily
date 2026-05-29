@@ -821,3 +821,18 @@ body.has-tabbar #app { padding-bottom: 84px; }
 }
 .src.active { background: var(--accent); color: #06120c; }
 .exp-badge { font-size: 13px; }
+
+/* Taksit */
+.taksit-btn { width: 100%; margin-top: 8px; }
+.inst-sheet { padding: 4px 20px 8px; display: flex; flex-direction: column; gap: 10px; }
+.inst-sheet strong { font-size: 16px; }
+.inst-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.inst-option {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  background: var(--surface-2); border: none; color: var(--text);
+  padding: 12px 14px; border-radius: var(--radius); cursor: pointer; text-align: left;
+}
+.inst-option strong { color: var(--accent); font-size: 14px; }
+.inst-option:active { background: var(--accent); color: #06120c; }
+.inst-option:active strong { color: #06120c; }
+.balance.instcard span:first-child { color: var(--text); }

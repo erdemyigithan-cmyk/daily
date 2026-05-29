@@ -129,6 +129,7 @@ body {
   color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer;
 }
 .inc-del:active { color: var(--danger); }
+.single-income .inc-del { display: none; }
 .inc-amount { background: var(--surface-2); }
 .inc-preview { display: block; margin-top: 6px; }
 

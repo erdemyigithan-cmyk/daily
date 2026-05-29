@@ -299,13 +299,21 @@
     row.querySelector('.inc-del').addEventListener('click', () => {
       if (container.querySelectorAll('.income-row').length > 1) {
         row.remove();
+        updateIncomeControls(container);
         updateIncomeTotal();
       }
     });
 
     container.appendChild(row);
     updateIncomeRowPreview(row);
+    updateIncomeControls(container);
     return row;
+  }
+
+  // Tek gelir varken sil (×) butonunu gizle: varsayilan sade tek gelir gorunumu.
+  function updateIncomeControls(container) {
+    const single = container.querySelectorAll('.income-row').length <= 1;
+    container.classList.toggle('single-income', single);
   }
 
   function updateIncomeRowPreview(row) {

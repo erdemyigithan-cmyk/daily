@@ -116,12 +116,6 @@
           </div>
         </div>
 
-        <div class="field">
-          <span>Veri</span>
-          <button type="button" id="exportBtn" class="btn-ghost">↓ Dışa aktar (JSON yedek)</button>
-          <label for="importFile" class="btn-ghost import-label">↑ İçe aktar (geri yükle)</label>
-          <input type="file" id="importFile" accept=".json" style="display:none">
-        </div>
       </form>
       <button type="submit" form="setupForm" class="btn-primary setup-save" id="saveBtn">Kaydet</button>
     `;
@@ -165,12 +159,6 @@
       row.querySelector('.fx-name').focus();
     });
     setupForm.addEventListener('submit', onSaveSetup);
-
-    document.getElementById('exportBtn').addEventListener('click', exportData);
-    document.getElementById('importFile').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (file) await importData(file);
-    });
 
     document.getElementById('presets').addEventListener('click', async (e) => {
       const toggle = e.target.closest('.preset-toggle');
@@ -442,7 +430,7 @@
       </section>
     `;
 
-    document.getElementById('settingsBtn').addEventListener('click', renderSetup);
+    document.getElementById('settingsBtn').addEventListener('click', openSettingsSheet);
     document.getElementById('prevDay').addEventListener('click', () => renderMain(addDays(selectedDate, -1)));
     document.getElementById('nextDay').addEventListener('click', () => renderMain(addDays(selectedDate, 1)));
     document.getElementById('viewDateInput').addEventListener('change', (e) => renderMain(e.target.value));
@@ -597,6 +585,39 @@
   function dateToTs(dateStr) {
     if (!dateStr || dateStr === todayStr()) return new Date().toISOString();
     return new Date(dateStr + 'T12:00:00').toISOString();
+  }
+
+  // ---------- Ayarlar sheet ----------
+  function openSettingsSheet() {
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+    overlay.innerHTML = `
+      <div class="sheet" role="dialog" aria-modal="true">
+        <div class="sheet-handle"></div>
+        <button class="sheet-item" id="sheetSettings">
+          <span class="sheet-icon">⚙</span> Ayarlar
+        </button>
+        <button class="sheet-item" id="sheetExport">
+          <span class="sheet-icon">↓</span> Dışa aktar (JSON yedek)
+        </button>
+        <label class="sheet-item" for="sheetImportFile">
+          <span class="sheet-icon">↑</span> İçe aktar (geri yükle)
+        </label>
+        <input type="file" id="sheetImportFile" accept=".json" style="display:none">
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    overlay.querySelector('#sheetSettings').addEventListener('click', () => { close(); renderSetup(); });
+    overlay.querySelector('#sheetExport').addEventListener('click', () => { close(); exportData(); });
+    overlay.querySelector('#sheetImportFile').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      close();
+      if (file) await importData(file);
+    });
   }
 
   // ---------- JSON yedek ----------

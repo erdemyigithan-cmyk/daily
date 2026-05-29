@@ -201,6 +201,67 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .chip:active { background: var(--accent); color: #06120c; }
 .chip:active small { color: #06120c; }
 
+/* Ekstreden sabit gider bulma yardimcisi */
+.ekstre-helper { margin-top: 14px; }
+.ekstre-toggle {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: transparent;
+  border: 1px dashed var(--surface-2);
+  color: var(--accent);
+  font-size: 14px; font-weight: 600;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  cursor: pointer; text-align: left;
+}
+.ekstre-chevron { color: var(--muted); font-size: 13px; }
+.ekstre-body { padding: 12px 2px 2px; }
+.ekstre-step {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  margin: 14px 0 4px;
+}
+.ekstre-body .ekstre-step:first-child { margin-top: 4px; }
+.bank-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.bank-chip {
+  background: var(--surface-2);
+  border: none; color: var(--text);
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  cursor: pointer; white-space: nowrap;
+}
+.bank-chip.active { background: var(--accent); color: #06120c; font-weight: 700; }
+.bank-steps {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.bank-steps li { margin-bottom: 6px; }
+.bank-steps .bank-note {
+  list-style: none;
+  margin-left: -20px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.prompt-text {
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 12px 14px;
+  margin: 8px 0;
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
 .plan-overlay {
   position: fixed;
   inset: 0;

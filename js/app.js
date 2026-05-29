@@ -82,6 +82,13 @@
       </div>`).join('');
   }
 
+  function buildBankChips() {
+    if (!window.BankGuide) return '';
+    return Object.keys(BankGuide.BANKS).map(name =>
+      `<button type="button" class="bank-chip" data-bank="${escapeAttr(name)}">${escapeHTML(name)}</button>`
+    ).join('');
+  }
+
   function presetChipLabel(name) {
     const plan = rootCatalogDefault(name);
     const price = plan ? `<small>${formatTL(plan.amount)}</small>` : '';
@@ -130,6 +137,24 @@
           <div class="presets-wrap">
             <small class="hint">Hazır şablon: kategoriye dokun, açılır.</small>
             <div id="presets">${buildPresetsHTML()}</div>
+          </div>
+
+          <div class="ekstre-helper">
+            <button type="button" id="ekstreToggle" class="ekstre-toggle">
+              <span>🧾 Sabit giderini bilmiyor musun? Kart ekstrenden bul</span>
+              <span class="ekstre-chevron">▸</span>
+            </button>
+            <div id="ekstreBody" class="ekstre-body" hidden>
+              <p class="ekstre-step">1. Geçen ayın kredi kartı ekstresini indir</p>
+              <small class="hint">Bankanı seç, uygulamada nasıl indireceğini göster:</small>
+              <div id="bankChips" class="bank-chips">${buildBankChips()}</div>
+              <ol id="bankSteps" class="bank-steps"></ol>
+
+              <p class="ekstre-step">2. Bu promptu kopyala, ekstreyle birlikte yapay zekaya ver</p>
+              <small class="hint">ChatGPT, Claude veya Gemini'ye ekstre dosyasını + bu metni yapıştır. Sana sabit giderleri liste verir.</small>
+              <pre id="promptText" class="prompt-text">${escapeHTML(window.BankGuide ? BankGuide.STATEMENT_PROMPT : '')}</pre>
+              <button type="button" id="copyPrompt" class="btn-ghost btn-ghost-accent">Promptu kopyala</button>
+            </div>
           </div>
         </div>
 
@@ -207,6 +232,44 @@
       const chip = e.target.closest('.chip');
       if (!chip) return;
       await addPreset(fixedList, chip.dataset.name);
+    });
+
+    setupEkstreHelper();
+  }
+
+  // Ekstreden sabit gider bulma yardimcisi: banka rehberi + hazir prompt.
+  function setupEkstreHelper() {
+    const toggle = document.getElementById('ekstreToggle');
+    if (!toggle) return;
+
+    toggle.addEventListener('click', () => {
+      const body = document.getElementById('ekstreBody');
+      const chev = toggle.querySelector('.ekstre-chevron');
+      body.hidden = !body.hidden;
+      chev.textContent = body.hidden ? '▸' : '▾';
+    });
+
+    const chips = document.getElementById('bankChips');
+    if (chips) chips.addEventListener('click', (e) => {
+      const chip = e.target.closest('.bank-chip');
+      if (!chip) return;
+      document.querySelectorAll('.bank-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const bank = BankGuide.BANKS[chip.dataset.bank];
+      const stepsEl = document.getElementById('bankSteps');
+      stepsEl.innerHTML = bank.steps.map(s => `<li>${escapeHTML(s)}</li>`).join('') +
+        (bank.note ? `<li class="bank-note">${escapeHTML(bank.note)}</li>` : '');
+    });
+
+    const copyBtn = document.getElementById('copyPrompt');
+    if (copyBtn) copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(BankGuide.STATEMENT_PROMPT);
+        copyBtn.textContent = '✓ Kopyalandı';
+        setTimeout(() => { copyBtn.textContent = 'Promptu kopyala'; }, 2000);
+      } catch {
+        alert('Kopyalanamadı. Metni elle seçip kopyalayın.');
+      }
     });
   }
 

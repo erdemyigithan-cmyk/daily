@@ -41,9 +41,12 @@
   }
 
   // ---------- Kurulum ekrani ----------
-  // Baslangic taslagi: tipik Turk hanesi, tutarlar bos (herkese gore degisir).
+  // Baslangic taslagi: modern Turk hanesi — fatura + abonelik + kisisel, tutarlar bos.
   const STARTER_TEMPLATE = [
-    'Kira', 'Elektrik', 'Su', 'Doğal gaz', 'Aidat', 'İnternet', 'Telefon'
+    'Kira', 'Elektrik', 'Su', 'Doğal gaz', 'Aidat',
+    'Telefon', 'İnternet',
+    'Netflix', 'Spotify', 'YouTube Premium', 'Amazon Prime', 'ChatGPT',
+    'iCloud', 'Ulaşım', 'Spor / Pilates'
   ];
 
   // Sabit gider sablonlari. Tek tusla eklenir; isim = islevsel etiket (marka degil).
@@ -168,8 +171,20 @@
     });
 
     document.getElementById('applyTemplate').addEventListener('click', () => {
-      STARTER_TEMPLATE.forEach(name => addFixedRow(fixedList, name));
-      fixedList.querySelector('.fx-amount')?.focus();
+      // Zaten dolu satir varsa ayni ismi tekrar ekleme
+      const existing = new Set(
+        [...fixedList.querySelectorAll('.fx-name')].map(i => i.value.trim().toLowerCase())
+      );
+      // Bos tek satir varsa onu temizle (taslak kalabalik gostermesin)
+      const rows = fixedList.querySelectorAll('.fixed-row');
+      if (rows.length === 1) {
+        const onlyName = rows[0].querySelector('.fx-name').value.trim();
+        const onlyAmt = rows[0].querySelector('.fx-amount').value.trim();
+        if (!onlyName && !onlyAmt) rows[0].remove();
+      }
+      STARTER_TEMPLATE
+        .filter(name => !existing.has(name.toLowerCase()))
+        .forEach(name => addFixedRow(fixedList, name));
       fixedList.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
     setupForm.addEventListener('submit', onSaveSetup);

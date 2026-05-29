@@ -98,6 +98,17 @@
     return [{ mode: 'net', amount: Number(settings && settings.income) || 0 }];
   }
 
+  // Yemek kartlarini tek listeye normalize et (eski tekil mealCard ile geriye uyumlu).
+  // Yeni model: settings.mealCards = [{ provider, monthlyLoad, startMonth }]
+  function normalizeMealCards(settings) {
+    if (settings && Array.isArray(settings.mealCards)) return settings.mealCards;
+    if (settings && settings.mealCard && settings.mealCard.enabled) {
+      const m = settings.mealCard;
+      return [{ provider: m.provider, monthlyLoad: m.monthlyLoad, startMonth: m.startMonth }];
+    }
+    return [];
+  }
+
   // Bir gelir listesinin verilen ay icin toplam NET'i. Brut gelirler AYRI AYRI
   // bordrodan cevrilir (TR gelir vergisi kisi basi kumulatif; toplayip tek hesap yanlis).
   function incomeNetForList(incomes, date) {
@@ -261,6 +272,7 @@
     incomeForDate,
     incomeNetForList,
     normalizeIncomes,
+    normalizeMealCards,
     configForPeriod,
     variableBudgetForPeriod,
     sumFixed,

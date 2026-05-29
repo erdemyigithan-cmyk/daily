@@ -15,6 +15,11 @@
     return `<span class="amt-num">${tlFmt.format(Math.round(n))}</span><span class="amt-cur">TL</span>`;
   }
 
+  // Harcama dizisindeki tutar toplami.
+  function sumAmounts(arr) {
+    return (arr || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  }
+
   // Input alanlari icin: tum tirnak/bosluk/noktalama kaldir, tamsayi dondur.
   function parseAmount(s) {
     return parseInt(String(s).replace(/\D/g, ''), 10) || 0;
@@ -107,7 +112,7 @@
     const s = state.settings || {};
     const fixed = state.fixed.length ? state.fixed : [];
     const incomes = Budget.normalizeIncomes(s);
-    const mealCards = normalizeMealCards(s);
+    const mealCards = Budget.normalizeMealCards(s);
     const mealOn = mealCards.length > 0;
 
     app.innerHTML = `
@@ -475,7 +480,7 @@
     row.className = 'fixed-row';
     row.innerHTML = `
       <input class="fx-name" type="text" placeholder="İsim (ör. Kira)" value="${name != null ? escapeAttr(name) : ''}">
-      <input class="fx-amount" type="text" inputmode="numeric" placeholder="0" value="${amount > 0 ? tlFmt.format(amount) : (amount === 0 ? '' : '')}">
+      <input class="fx-amount" type="text" inputmode="numeric" placeholder="0" value="${amount > 0 ? tlFmt.format(amount) : ''}">
       <button type="button" class="fx-var ${variable ? 'on' : ''}" aria-label="Değişken tutar" title="Tutarı her ay değişir (ay sonunda denkleştirilir)">≈</button>
       <button type="button" class="fx-del" aria-label="Sil">×</button>
     `;
@@ -499,9 +504,7 @@
 
   // 'YYYY-MM-DD' veya Date -> donem basi 'YYYY-MM-01'
   function periodStartISO(dateStr) {
-    const s = (dateStr instanceof Date)
-      ? dateStr.getFullYear() + '-' + String(dateStr.getMonth() + 1).padStart(2, '0')
-      : String(dateStr).slice(0, 7);
+    const s = (dateStr instanceof Date) ? monthKey(dateStr) : String(dateStr).slice(0, 7);
     return s + '-01';
   }
 
@@ -523,36 +526,39 @@
   }
 
   // Kaydederken "hangi aydan itibaren" sec. 'YYYY-MM-01' veya null (iptal) doner.
+  // Ortak bottom-sheet iskeleti: overlay + .sheet + tutamac. {overlay, close} doner.
+  function openSheet(bodyHtml) {
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+    overlay.innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div>${bodyHtml}</div>`;
+    document.body.appendChild(overlay);
+    return { overlay, close: () => overlay.remove() };
+  }
+
   function chooseEffectiveMonth(startPeriod, curPeriod) {
     return new Promise((resolve) => {
       const def = curPeriod.slice(0, 7);
       // Gelecek 12 aya kadar secilebilir (ileride gecerli olacak zam vb.)
       const curD = new Date(curPeriod + 'T00:00:00');
       const maxD = new Date(curD.getFullYear(), curD.getMonth() + 12, 1);
-      const maxM = maxD.getFullYear() + '-' + String(maxD.getMonth() + 1).padStart(2, '0');
-      const overlay = document.createElement('div');
-      overlay.className = 'sheet-overlay';
-      overlay.innerHTML = `
-        <div class="sheet" role="dialog" aria-modal="true">
-          <div class="sheet-handle"></div>
-          <div class="eff-sheet">
-            <strong>Değişiklik hangi aydan itibaren geçerli?</strong>
-            <p class="plan-hint">Geçmiş bir ay (geç giriş) ya da gelecek bir ay (ör. zam Haziran'da başlayacak) seçebilirsin. Seçtiğin aydan önceki dönemler eski değerlerle kalır.</p>
-            <input id="effMonth" type="month" value="${def}" min="${startPeriod.slice(0, 7)}" max="${maxM}">
-            <div class="edit-btns">
-              <button type="button" class="edit-save" id="effOk">Uygula</button>
-              <button type="button" class="edit-cancel" id="effCancel">İptal</button>
-            </div>
+      const maxM = monthKey(maxD);
+      const { overlay } = openSheet(`
+        <div class="eff-sheet">
+          <strong>Değişiklik hangi aydan itibaren geçerli?</strong>
+          <p class="plan-hint">Geçmiş bir ay (geç giriş) ya da gelecek bir ay (ör. zam Haziran'da başlayacak) seçebilirsin. Seçtiğin aydan önceki dönemler eski değerlerle kalır.</p>
+          <input id="effMonth" type="month" value="${def}" min="${startPeriod.slice(0, 7)}" max="${maxM}">
+          <div class="edit-btns">
+            <button type="button" class="edit-save" id="effOk">Uygula</button>
+            <button type="button" class="edit-cancel" id="effCancel">İptal</button>
           </div>
-        </div>`;
-      document.body.appendChild(overlay);
-      const close = (v) => { overlay.remove(); resolve(v); };
+        </div>`);
+      const done = (v) => { overlay.remove(); resolve(v); };
       overlay.addEventListener('click', (e) => {
-        if (e.target === overlay || e.target.closest('#effCancel')) close(null);
+        if (e.target === overlay || e.target.closest('#effCancel')) done(null);
       });
       overlay.querySelector('#effOk').addEventListener('click', () => {
         const m = overlay.querySelector('#effMonth').value || def;
-        close(m + '-01');
+        done(m + '-01');
       });
     });
   }
@@ -654,7 +660,7 @@
   // Ayda 1 telafi: tek gunluk bosluk zinciri kirmasin. Tek kalici state: settings.streakFreeze.
   function computeStreakWithFreeze(todaySpendable) {
     const now = new Date();
-    const month = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const month = monthKey(now);
     let freeze = state.settings.streakFreeze;
     let changed = false;
     if (!freeze || freeze.month !== month) { freeze = { month, coveredDay: null }; changed = true; }
@@ -733,8 +739,8 @@
     const over = r.spendableToday < 0;
     const dayExpenses = expensesForDay(selectedDate)
       .sort((a, b) => new Date(b.ts) - new Date(a.ts));
-    const dayCashTotal = dayExpenses.filter(e => e.source !== 'meal').reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    const dayMealTotal = dayExpenses.filter(e => e.source === 'meal').reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const dayCashTotal = sumAmounts(dayExpenses.filter(e => e.source !== 'meal'));
+    const dayMealTotal = sumAmounts(dayExpenses.filter(e => e.source === 'meal'));
 
     const heroClass = viewingToday ? (over ? 'over' : '') : 'history';
     const streak = viewingToday ? computeStreakWithFreeze(r.spendableToday) : null;
@@ -940,19 +946,10 @@
   // Yemek karti yardimcilari
   function cashExpenses() { return state.expenses.filter(e => e.source !== 'meal'); }
   function mealExpenses() { return state.expenses.filter(e => e.source === 'meal'); }
-  function curMonthStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
-
-  // Yemek kartlarini tek listeye normalize et (eski tekil mealCard ile geriye uyumlu).
-  function normalizeMealCards(s) {
-    if (s && Array.isArray(s.mealCards)) return s.mealCards;
-    if (s && s.mealCard && s.mealCard.enabled) {
-      return [{ provider: s.mealCard.provider, monthlyLoad: s.mealCard.monthlyLoad, startMonth: s.mealCard.startMonth }];
-    }
-    return [];
-  }
+  function curMonthStr() { return monthKey(new Date()); }
 
   function mealCardInfo() {
-    const cards = normalizeMealCards(state.settings);
+    const cards = Budget.normalizeMealCards(state.settings);
     if (!cards.length) return null;
     const now = new Date();
     let totalLoaded = 0;
@@ -963,11 +960,10 @@
       const months = Math.max(1, (now.getFullYear() - sy) * 12 + (now.getMonth() + 1 - sm) + 1);
       totalLoaded += load * months;
     }
-    const totalSpent = mealExpenses().reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const ml = mealExpenses();
+    const totalSpent = sumAmounts(ml);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    const thisMonthSpent = mealExpenses()
-      .filter(e => new Date(e.ts).getTime() >= monthStart)
-      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const thisMonthSpent = sumAmounts(ml.filter(e => new Date(e.ts).getTime() >= monthStart));
     const provider = cards.length === 1 ? (cards[0].provider || 'Yemek kartı') : `Yemek kartı (${cards.length})`;
     return { balance: totalLoaded - totalSpent, thisMonthSpent, provider };
   }
@@ -1005,11 +1001,10 @@
     const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
     const inst = state.expenses.filter(e => e.inst);
     if (!inst.length) return null;
-    const sum = arr => arr.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    const thisMonth = sum(inst.filter(e => { const t = +new Date(e.ts); return t >= monthStart && t < nextMonthStart; }));
+    const thisMonth = sumAmounts(inst.filter(e => { const t = +new Date(e.ts); return t >= monthStart && t < nextMonthStart; }));
     const upcoming = inst.filter(e => +new Date(e.ts) >= nextMonthStart);
     if (thisMonth === 0 && upcoming.length === 0) return null;
-    return { thisMonth, upcomingCount: upcoming.length, upcomingTotal: sum(upcoming) };
+    return { thisMonth, upcomingCount: upcoming.length, upcomingTotal: sumAmounts(upcoming) };
   }
 
   // Denkleştirme bekleyen en eski kapanmış dönem (değişken kalemi olan, henüz yapılmamış).
@@ -1018,7 +1013,7 @@
     if (!s) return null;
     const startKey = (s.startDate || todayStr()).slice(0, 7);
     const now = new Date();
-    const curKey = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const curKey = monthKey(now);
     const rec = s.reconcile || {};
     let [y, m] = startKey.split('-').map(Number);
     for (let i = 0; i < 120; i++) { // güvenlik sınırı
@@ -1040,29 +1035,23 @@
 
   // Denkleştirme sheet'i: değişken kalemlerin gerçekleşenini al, farkı kaydet.
   function openReconcileSheet(recon) {
-    const overlay = document.createElement('div');
-    overlay.className = 'sheet-overlay';
-    overlay.innerHTML = `
-      <div class="sheet" role="dialog" aria-modal="true">
-        <div class="sheet-handle"></div>
-        <div class="recon-sheet">
-          <strong>${recon.label} — sabit gider denkleştirme</strong>
-          <p class="plan-hint">Gerçekleşen tutarları gir. Fark (gerçek − tahmin) devreden bakiyene işlenir.</p>
-          <div class="recon-rows">
-            ${recon.items.map((it, i) => `
-              <div class="recon-row">
-                <span>${escapeAttr(it.name)}</span>
-                <input class="recon-act" data-est="${Number(it.amount) || 0}" type="text" inputmode="numeric" value="${it.amount > 0 ? tlFmt.format(it.amount) : ''}">
-              </div>`).join('')}
-          </div>
-          <p class="recon-diff" id="reconDiff">Fark: 0 TL</p>
-          <div class="edit-btns">
-            <button type="button" class="edit-save" id="reconSave">Kaydet</button>
-            <button type="button" class="edit-cancel" id="reconSkip">Tahmin doğruydu</button>
-          </div>
+    const { overlay } = openSheet(`
+      <div class="recon-sheet">
+        <strong>${recon.label} — sabit gider denkleştirme</strong>
+        <p class="plan-hint">Gerçekleşen tutarları gir. Fark (gerçek − tahmin) devreden bakiyene işlenir.</p>
+        <div class="recon-rows">
+          ${recon.items.map((it) => `
+            <div class="recon-row">
+              <span>${escapeAttr(it.name)}</span>
+              <input class="recon-act" data-est="${Number(it.amount) || 0}" type="text" inputmode="numeric" value="${it.amount > 0 ? tlFmt.format(it.amount) : ''}">
+            </div>`).join('')}
         </div>
-      </div>`;
-    document.body.appendChild(overlay);
+        <p class="recon-diff" id="reconDiff">Fark: 0 TL</p>
+        <div class="edit-btns">
+          <button type="button" class="edit-save" id="reconSave">Kaydet</button>
+          <button type="button" class="edit-cancel" id="reconSkip">Tahmin doğruydu</button>
+        </div>
+      </div>`);
     const acts = [...overlay.querySelectorAll('.recon-act')];
     acts.forEach(applyNumFmt);
     const diffEl = overlay.querySelector('#reconDiff');
@@ -1090,26 +1079,20 @@
   function chooseInstallments(total) {
     return new Promise((resolve) => {
       const quick = [3, 6, 9, 12];
-      const overlay = document.createElement('div');
-      overlay.className = 'sheet-overlay';
-      overlay.innerHTML = `
-        <div class="sheet" role="dialog" aria-modal="true">
-          <div class="sheet-handle"></div>
-          <div class="inst-sheet">
-            <strong>${formatTL(total)} — kaç aya bölelim?</strong>
-            <p class="plan-hint">Taksitli: bu ay bütçenden sadece aylık tutar düşer, kalanı sonraki aylara yayılır. Tek seferlik istersen iptal et, "Ekle"yi kullan.</p>
-            <div class="inst-quick">
-              ${quick.map(n => `<button type="button" class="inst-chip" data-n="${n}">${n}</button>`).join('')}
-            </div>
-            <input id="instCount" type="number" inputmode="numeric" min="2" max="36" placeholder="Taksit sayısı (ör. 5)">
-            <p class="inst-preview" id="instPreview">&nbsp;</p>
-            <div class="edit-btns">
-              <button type="button" class="edit-save" id="instOk">Uygula</button>
-              <button type="button" class="edit-cancel" id="instCancel">İptal</button>
-            </div>
+      const { overlay } = openSheet(`
+        <div class="inst-sheet">
+          <strong>${formatTL(total)} — kaç aya bölelim?</strong>
+          <p class="plan-hint">Taksitli: bu ay bütçenden sadece aylık tutar düşer, kalanı sonraki aylara yayılır. Tek seferlik istersen iptal et, "Ekle"yi kullan.</p>
+          <div class="inst-quick">
+            ${quick.map(n => `<button type="button" class="inst-chip" data-n="${n}">${n}</button>`).join('')}
           </div>
-        </div>`;
-      document.body.appendChild(overlay);
+          <input id="instCount" type="number" inputmode="numeric" min="2" max="36" placeholder="Taksit sayısı (ör. 5)">
+          <p class="inst-preview" id="instPreview">&nbsp;</p>
+          <div class="edit-btns">
+            <button type="button" class="edit-save" id="instOk">Uygula</button>
+            <button type="button" class="edit-cancel" id="instCancel">İptal</button>
+          </div>
+        </div>`);
       const close = (v) => { overlay.remove(); resolve(v); };
       const input = overlay.querySelector('#instCount');
       const preview = overlay.querySelector('#instPreview');
@@ -1183,7 +1166,7 @@
   function addDays(dateStr, delta) {
     const d = parseDateStr(dateStr);
     d.setDate(d.getDate() + delta);
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    return dateKey(d);
   }
 
   function clampViewDate(dateStr) {
@@ -1230,15 +1213,15 @@
       .replace(/"/g, '&quot;');
   }
 
-  function todayStr() {
-    const d = new Date();
+  // Tarih anahtarlari (tek kaynak): yerel YYYY-MM-DD ve YYYY-MM.
+  function dateKey(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
-
-  function tsToDateStr(ts) {
-    const d = new Date(ts);
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  function monthKey(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
   }
+  function todayStr() { return dateKey(new Date()); }
+  function tsToDateStr(ts) { return dateKey(new Date(ts)); }
 
   // Bugun -> simdi; gecmis gun -> o gunun oglen 12:00'si (liste gorunumu icin)
   function dateToTs(dateStr) {
@@ -1377,9 +1360,7 @@
   function renderKumbara() {
     const r = Budget.computeBudget(state.settings, state.fixed, cashExpenses(), new Date());
     const savingsTarget = Number(state.settings.savingsTarget) || 0;
-    const spentToday = expensesForDay(todayStr())
-      .filter(e => e.source !== 'meal')
-      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const spentToday = sumAmounts(expensesForDay(todayStr()).filter(e => e.source !== 'meal'));
     const sv = Savings.compute({
       periodVariableBudget: r.periodVariableBudget,
       savingsTarget,
@@ -1435,29 +1416,22 @@
 
   // ---------- Ayarlar sheet ----------
   function openSettingsSheet() {
-    const overlay = document.createElement('div');
-    overlay.className = 'sheet-overlay';
-    overlay.innerHTML = `
-      <div class="sheet" role="dialog" aria-modal="true">
-        <div class="sheet-handle"></div>
-        <button class="sheet-item" id="sheetSettings">
-          <span class="sheet-icon">✎</span> Kurulumu düzenle
-        </button>
-        <button class="sheet-item" id="sheetCsv">
-          <span class="sheet-icon">📄</span> Harcama geçmişi (CSV / Excel)
-        </button>
-        <button class="sheet-item" id="sheetExport">
-          <span class="sheet-icon">↓</span> Dışa aktar (JSON yedek)
-        </button>
-        <label class="sheet-item" for="sheetImportFile">
-          <span class="sheet-icon">↑</span> İçe aktar (geri yükle)
-        </label>
-        <input type="file" id="sheetImportFile" accept=".json" style="display:none">
-      </div>
-    `;
-    document.body.appendChild(overlay);
+    const { overlay, close } = openSheet(`
+      <button class="sheet-item" id="sheetSettings">
+        <span class="sheet-icon">✎</span> Kurulumu düzenle
+      </button>
+      <button class="sheet-item" id="sheetCsv">
+        <span class="sheet-icon">📄</span> Harcama geçmişi (CSV / Excel)
+      </button>
+      <button class="sheet-item" id="sheetExport">
+        <span class="sheet-icon">↓</span> Dışa aktar (JSON yedek)
+      </button>
+      <label class="sheet-item" for="sheetImportFile">
+        <span class="sheet-icon">↑</span> İçe aktar (geri yükle)
+      </label>
+      <input type="file" id="sheetImportFile" accept=".json" style="display:none">
+    `);
 
-    const close = () => overlay.remove();
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
     overlay.querySelector('#sheetSettings').addEventListener('click', () => { close(); renderSetup(); });

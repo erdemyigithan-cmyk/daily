@@ -107,7 +107,8 @@
     const s = state.settings || {};
     const fixed = state.fixed.length ? state.fixed : [];
     const incomes = Budget.normalizeIncomes(s);
-    const mc = s.mealCard || {};
+    const mealCards = normalizeMealCards(s);
+    const mealOn = mealCards.length > 0;
 
     app.innerHTML = `
       <header class="head"><h1>${isConfigured() ? 'Kurulumu Düzenle' : 'Kurulum'}</h1></header>
@@ -133,16 +134,16 @@
         <div class="field">
           <span>Yemek kartı</span>
           <label class="meal-toggle">
-            <input type="checkbox" id="mealEnabled" ${mc.enabled ? 'checked' : ''}>
+            <span class="switch">
+              <input type="checkbox" id="mealEnabled" ${mealOn ? 'checked' : ''}>
+              <span class="switch-track"></span><span class="switch-thumb"></span>
+            </span>
             <span>Yemek kartım var (ayrı cüzdan)</span>
           </label>
-          <div id="mealFields" class="meal-fields" ${mc.enabled ? '' : 'hidden'}>
-            <select id="mealProvider">
-              ${MEAL_PROVIDERS.map(p => `<option ${mc.provider === p ? 'selected' : ''}>${p}</option>`).join('')}
-            </select>
-            <input id="mealLoad" type="text" inputmode="numeric" placeholder="Aylık yükleme (TL)"
-                   value="${mc.monthlyLoad > 0 ? tlFmt.format(mc.monthlyLoad) : ''}">
-            <small class="hint">Bu para günlük nakit bütçeni etkilemez; yalnız yemek kartı bakiyesinde tutulur.</small>
+          <div id="mealFields" class="meal-fields" ${mealOn ? '' : 'hidden'}>
+            <div id="mealCardList"></div>
+            <button type="button" id="addMealCard" class="btn-ghost">+ Kart ekle</button>
+            <small class="hint">Bu para günlük nakit bütçeni etkilemez; ortak bütçe için birden fazla kart ekleyebilirsin (tek havuzda toplanır).</small>
           </div>
         </div>
 
@@ -199,9 +200,12 @@
       row.querySelector('.inc-amount').focus();
     });
 
-    applyNumFmt(document.getElementById('mealLoad'));
+    const mealCardList = document.getElementById('mealCardList');
+    mealCards.forEach(c => addMealCardRow(mealCardList, c.provider, c.monthlyLoad, c.startMonth));
+    document.getElementById('addMealCard').addEventListener('click', () => addMealCardRow(mealCardList));
     document.getElementById('mealEnabled').addEventListener('change', (e) => {
       document.getElementById('mealFields').hidden = !e.target.checked;
+      if (e.target.checked && !mealCardList.querySelector('.mealcard-row')) addMealCardRow(mealCardList);
     });
 
     document.querySelector('.pct-chips').addEventListener('click', (e) => {
@@ -599,20 +603,9 @@
     const live = Budget.configForPeriod({ history }, curDate) || newSnap;
     const totalNet = Math.round(Budget.incomeForDate({ incomes: live.incomes }, new Date()));
 
-    // Yemek karti config (ayri cuzdan)
+    // Yemek kartlari (ayri cuzdan, ortak bütçede birden fazla olabilir)
     const mealEnabled = document.getElementById('mealEnabled').checked;
-    let mealCard;
-    if (mealEnabled) {
-      const prevMc = existing.mealCard || {};
-      mealCard = {
-        enabled: true,
-        provider: document.getElementById('mealProvider').value,
-        monthlyLoad: parseAmount(document.getElementById('mealLoad').value),
-        startMonth: prevMc.startMonth || curPeriod.slice(0, 7)
-      };
-    } else {
-      mealCard = { enabled: false };
-    }
+    const mealCards = mealEnabled ? readMealCardRows() : [];
 
     await DB.saveSettings({
       history,
@@ -622,7 +615,8 @@
       incomeMode: live.incomes.length === 1 ? live.incomes[0].mode : 'mixed',
       grossIncome: 0,
       salaryDay,
-      mealCard
+      mealCards,
+      mealCard: { enabled: false } // eski tekil alan nötrlenir
     });
     await DB.replaceFixedExpenses(live.fixed);
     await loadAll();
@@ -946,22 +940,62 @@
   // Yemek karti yardimcilari
   function cashExpenses() { return state.expenses.filter(e => e.source !== 'meal'); }
   function mealExpenses() { return state.expenses.filter(e => e.source === 'meal'); }
+  function curMonthStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+
+  // Yemek kartlarini tek listeye normalize et (eski tekil mealCard ile geriye uyumlu).
+  function normalizeMealCards(s) {
+    if (s && Array.isArray(s.mealCards)) return s.mealCards;
+    if (s && s.mealCard && s.mealCard.enabled) {
+      return [{ provider: s.mealCard.provider, monthlyLoad: s.mealCard.monthlyLoad, startMonth: s.mealCard.startMonth }];
+    }
+    return [];
+  }
 
   function mealCardInfo() {
-    const mc = state.settings && state.settings.mealCard;
-    if (!mc || !mc.enabled) return null;
-    const load = Number(mc.monthlyLoad) || 0;
+    const cards = normalizeMealCards(state.settings);
+    if (!cards.length) return null;
     const now = new Date();
-    const start = mc.startMonth || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
-    const [sy, sm] = start.split('-').map(Number);
-    const loadMonths = Math.max(1, (now.getFullYear() - sy) * 12 + (now.getMonth() + 1 - sm) + 1);
-    const totalLoaded = load * loadMonths;
+    let totalLoaded = 0;
+    for (const c of cards) {
+      const load = Number(c.monthlyLoad) || 0;
+      const start = c.startMonth || curMonthStr();
+      const [sy, sm] = start.split('-').map(Number);
+      const months = Math.max(1, (now.getFullYear() - sy) * 12 + (now.getMonth() + 1 - sm) + 1);
+      totalLoaded += load * months;
+    }
     const totalSpent = mealExpenses().reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const thisMonthSpent = mealExpenses()
       .filter(e => new Date(e.ts).getTime() >= monthStart)
       .reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    return { balance: totalLoaded - totalSpent, monthlyLoad: load, thisMonthSpent, provider: mc.provider };
+    const provider = cards.length === 1 ? (cards[0].provider || 'Yemek kartı') : `Yemek kartı (${cards.length})`;
+    return { balance: totalLoaded - totalSpent, thisMonthSpent, provider };
+  }
+
+  // Kurulum: yemek karti satiri (saglayici + aylik yukleme). startMonth dataset'te saklanir.
+  function addMealCardRow(container, provider, load, startMonth) {
+    const row = document.createElement('div');
+    row.className = 'mealcard-row';
+    row.dataset.start = startMonth || curMonthStr();
+    row.innerHTML = `
+      <select class="mc-provider">${MEAL_PROVIDERS.map(p => `<option ${provider === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+      <input class="mc-load" type="text" inputmode="numeric" placeholder="Aylık yükleme (TL)" value="${load > 0 ? tlFmt.format(load) : ''}">
+      <button type="button" class="mc-del" aria-label="Sil">×</button>
+    `;
+    applyNumFmt(row.querySelector('.mc-load'));
+    row.querySelector('.mc-del').addEventListener('click', () => row.remove());
+    container.appendChild(row);
+    return row;
+  }
+
+  function readMealCardRows() {
+    return [...document.querySelectorAll('.mealcard-row')]
+      .map(r => ({
+        provider: r.querySelector('.mc-provider').value,
+        monthlyLoad: parseAmount(r.querySelector('.mc-load').value),
+        startMonth: r.dataset.start || curMonthStr()
+      }))
+      .filter(c => c.monthlyLoad > 0);
   }
 
   // Taksit ozeti: bu ayki taksit odemesi + gelecek aylardaki kalan taksitler.

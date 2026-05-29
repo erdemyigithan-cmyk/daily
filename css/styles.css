@@ -50,8 +50,10 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
-html, body {
+html {
   height: 100%;
+}
+html, body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
@@ -59,8 +61,11 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
-/* Atmosfer: üstte zümrüt parıltı, derinleşen zemin + ince grain dokusu */
+/* Atmosfer: üstte zümrüt parıltı, derinleşen zemin + ince grain dokusu.
+   min-height (height değil): içerik uzayınca belge doğal kayar — iOS standalone'da
+   height:100% scroll'u kilitliyordu. Kısa içerikte #app yine viewport'u doldurur. */
 body {
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);

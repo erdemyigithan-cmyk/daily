@@ -501,7 +501,10 @@
     app.innerHTML = `
       <header class="head">
         <h1>${viewingToday ? 'Bugün' : 'Geçmiş'}</h1>
-        <button id="settingsBtn" class="icon-btn" aria-label="Ayarlar">⚙</button>
+        <div class="head-actions">
+          <button id="statsBtn" class="icon-btn" aria-label="İstatistikler">📊</button>
+          <button id="settingsBtn" class="icon-btn" aria-label="Ayarlar">⚙</button>
+        </div>
       </header>
 
       <section class="day-nav">
@@ -555,6 +558,7 @@
     `;
 
     document.getElementById('settingsBtn').addEventListener('click', openSettingsSheet);
+    document.getElementById('statsBtn').addEventListener('click', renderStats);
     document.getElementById('prevDay').addEventListener('click', () => renderMain(addDays(selectedDate, -1)));
     document.getElementById('nextDay').addEventListener('click', () => renderMain(addDays(selectedDate, 1)));
     document.getElementById('viewDateInput').addEventListener('change', (e) => renderMain(e.target.value));
@@ -709,6 +713,133 @@
   function dateToTs(dateStr) {
     if (!dateStr || dateStr === todayStr()) return new Date().toISOString();
     return new Date(dateStr + 'T12:00:00').toISOString();
+  }
+
+  // ---------- Istatistik ekrani ----------
+  let statsPeriod = '7'; // '7' | '30' | 'period' | 'last'
+
+  function atMid(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0); }
+  function addDaysDate(d, n) { const c = atMid(d); c.setDate(c.getDate() + n); return c; }
+
+  // Secili periyot icin {from, to, label} + onceki esit donem {prevFrom, prevTo}.
+  function statsRange(key) {
+    const now = new Date();
+    const today = atMid(now);
+    const tomorrow = addDaysDate(today, 1);
+
+    if (key === '30') {
+      const from = addDaysDate(today, -29);
+      return { from, to: tomorrow, label: 'Son 30 gün', prevFrom: addDaysDate(from, -30), prevTo: from };
+    }
+    if (key === 'period') {
+      const from = Budget.periodStartFor(now, 1);
+      const prevFrom = Budget.periodStartFor(addDaysDate(from, -1), 1);
+      return { from, to: tomorrow, label: 'Bu dönem', prevFrom, prevTo: from };
+    }
+    if (key === 'last') {
+      const curStart = Budget.periodStartFor(now, 1);
+      const from = Budget.periodStartFor(addDaysDate(curStart, -1), 1);
+      const prevFrom = Budget.periodStartFor(addDaysDate(from, -1), 1);
+      return { from, to: curStart, label: 'Geçen dönem', prevFrom, prevTo: from };
+    }
+    // varsayilan: son 7 gun
+    const from = addDaysDate(today, -6);
+    return { from, to: tomorrow, label: 'Son 7 gün', prevFrom: addDaysDate(from, -7), prevTo: from };
+  }
+
+  const STAT_PERIODS = [
+    { key: '7', label: 'Son 7 gün' },
+    { key: '30', label: 'Son 30 gün' },
+    { key: 'period', label: 'Bu dönem' },
+    { key: 'last', label: 'Geçen dönem' }
+  ];
+
+  function shortDate(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+  }
+
+  function renderStats() {
+    const r = statsRange(statsPeriod);
+    const sum = Stats.summarize(state.expenses, r.from, r.to);
+    const cmp = Stats.compare(state.expenses, r.from, r.to, r.prevFrom, r.prevTo);
+
+    const maxTotal = sum.series.reduce((m, d) => Math.max(m, d.total), 0);
+    const manyBars = sum.series.length > 14;
+
+    // Karsilastirma metni
+    let cmpHtml = '';
+    if (cmp.pct === null) {
+      cmpHtml = cmp.current > 0
+        ? '<span class="cmp-muted">Önceki eşit dönemde harcama yok</span>'
+        : '';
+    } else {
+      const up = cmp.diff > 0;
+      const arrow = up ? '▲' : (cmp.diff < 0 ? '▼' : '•');
+      const cls = up ? 'cmp-up' : (cmp.diff < 0 ? 'cmp-down' : 'cmp-flat');
+      cmpHtml = `<span class="${cls}">${arrow} %${Math.abs(cmp.pct)}</span>
+        <span class="cmp-muted">önceki döneme göre (${formatTL(cmp.previous)})</span>`;
+    }
+
+    app.innerHTML = `
+      <header class="head">
+        <button id="backBtn" class="icon-btn" aria-label="Geri">‹</button>
+        <h1>İstatistikler</h1>
+        <span class="head-spacer"></span>
+      </header>
+
+      <div class="stat-periods">
+        ${STAT_PERIODS.map(p =>
+          `<button type="button" class="stat-period ${p.key === statsPeriod ? 'active' : ''}" data-key="${p.key}">${p.label}</button>`
+        ).join('')}
+      </div>
+
+      <section class="stat-cards">
+        <div class="stat-card">
+          <span class="stat-label">Toplam harcama</span>
+          <strong class="stat-value">${formatTL(sum.total)}</strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Günlük ortalama</span>
+          <strong class="stat-value">${formatTL(sum.dailyAvg)}</strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">En yüksek gün</span>
+          <strong class="stat-value">${sum.maxDay.total > 0 ? formatTL(sum.maxDay.total) : '—'}</strong>
+          <small class="stat-sub">${sum.maxDay.total > 0 ? shortDate(sum.maxDay.date) : ''}</small>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">İşlem sayısı</span>
+          <strong class="stat-value">${sum.count}</strong>
+        </div>
+      </section>
+
+      ${cmpHtml ? `<section class="stat-compare">${cmpHtml}</section>` : ''}
+
+      <section class="chart-wrap">
+        <h2 class="list-title">Günlük harcama · ${r.label}</h2>
+        ${sum.total === 0
+          ? '<p class="empty">Bu dönemde harcama yok.</p>'
+          : `<div class="chart ${manyBars ? 'chart-dense' : ''}">
+              ${sum.series.map(d => {
+                const h = maxTotal > 0 ? Math.round((d.total / maxTotal) * 100) : 0;
+                return `<div class="chart-bar" style="height:${Math.max(h, d.total > 0 ? 4 : 0)}%" title="${shortDate(d.date)}: ${formatTL(d.total)}"></div>`;
+              }).join('')}
+            </div>
+            <div class="chart-axis">
+              <span>${shortDate(sum.series[0].date)}</span>
+              <span>${shortDate(sum.series[sum.series.length - 1].date)}</span>
+            </div>`}
+      </section>
+    `;
+
+    document.getElementById('backBtn').addEventListener('click', () => renderMain());
+    document.querySelector('.stat-periods').addEventListener('click', (e) => {
+      const btn = e.target.closest('.stat-period');
+      if (!btn) return;
+      statsPeriod = btn.dataset.key;
+      renderStats();
+    });
   }
 
   // ---------- Ayarlar sheet ----------

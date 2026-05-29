@@ -1201,6 +1201,7 @@
         <div class="stat-card">
           <span class="stat-label">Günlük ortalama</span>
           <strong class="stat-value">${formatTL(sum.dailyAvg)}</strong>
+          <small class="stat-sub">${sum.loggedDays} günde</small>
         </div>
         <div class="stat-card">
           <span class="stat-label">En yüksek gün</span>

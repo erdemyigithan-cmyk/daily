@@ -36,14 +36,20 @@
   function summarize(expenses, from, to) {
     const series = dailySeries(expenses, from, to);
     let total = 0, count = 0;
+    const loggedKeys = new Set(); // kayit girilen gunler (kayit olmayan gun ortalamaya KATILMAZ)
     for (const e of expenses || []) {
       const t = new Date(e.ts);
-      if (t >= from && t < to) { total += Number(e.amount) || 0; count++; }
+      if (t >= from && t < to) {
+        total += Number(e.amount) || 0;
+        count++;
+        loggedKeys.add(dayKey(t));
+      }
     }
-    const days = series.length || 1;
-    const dailyAvg = total / days;
+    const days = series.length || 1;        // takvim gunu (grafik/eksen icin)
+    const loggedDays = loggedKeys.size;      // takip edilen gun (ortalama paydasi)
+    const dailyAvg = loggedDays > 0 ? total / loggedDays : 0;
     const maxDay = series.reduce((m, d) => (d.total > m.total ? d : m), { date: null, total: 0 });
-    return { total, count, days, dailyAvg, maxDay, series };
+    return { total, count, days, loggedDays, dailyAvg, maxDay, series };
   }
 
   // Iki donemi karsilastir: { current, previous, diff, pct }

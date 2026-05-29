@@ -172,6 +172,9 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .preset-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 4px 2px; }
 .preset-chips[hidden] { display: none; }
 .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   background: var(--surface-2);
   border: none;
   color: var(--text);
@@ -181,7 +184,84 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   cursor: pointer;
   white-space: nowrap;
 }
+.chip small {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
 .chip:active { background: var(--accent); color: #06120c; }
+.chip:active small { color: #06120c; }
+
+.plan-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(2, 8, 6, 0.62);
+  padding: 16px;
+}
+.plan-sheet {
+  width: min(100%, 480px);
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: 24px;
+  padding: 18px;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
+}
+.plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.plan-head strong { font-size: 18px; }
+.plan-close {
+  background: var(--surface-2);
+  border: none;
+  color: var(--muted);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  font-size: 22px;
+  cursor: pointer;
+}
+.plan-hint {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+.plan-options {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 10px;
+}
+.plan-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface-2);
+  border: none;
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 13px 14px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.plan-option strong { color: var(--accent); }
+.plan-option:active {
+  background: var(--accent);
+  color: #06120c;
+}
+.plan-option:active strong { color: #06120c; }
+.plan-source {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
 
 /* Ana ekran */
 .day-nav {

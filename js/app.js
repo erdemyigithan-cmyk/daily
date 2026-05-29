@@ -46,7 +46,7 @@
   const PRESETS = [
     { cat: 'Faturalar', items: ['Elektrik', 'Su', 'Doğal gaz', 'Isıtma', 'Aidat'] },
     { cat: 'Telefon & İnternet', items: ['Telefon', 'İnternet', 'TV / Kablo', 'Mobil hat'] },
-    { cat: 'Abonelikler', items: ['Netflix', 'Spotify', 'YouTube Premium', 'Amazon Prime', 'Disney+', 'BluTV', 'Exxen', 'ChatGPT', 'iCloud', 'Google One', 'Apple One', 'Aposto', 'Gazete / Dergi'] },
+    { cat: 'Abonelikler', items: ['Netflix', 'Spotify', 'YouTube Premium', 'Amazon Prime', 'Disney+', 'BluTV', 'Max', 'Exxen', 'MUBI', 'Gain', 'TOD', 'S Sport Plus', 'TV+', 'Tivibu', 'Apple Music', 'Apple Arcade', 'iCloud', 'ChatGPT', 'Google One', 'Apple One', 'Aposto', 'Gazete / Dergi'] },
     { cat: 'Ulaşım', items: ['Ulaşım', 'Yakıt', 'Otopark', 'OGS / HGS', 'Araç kredisi'] },
     { cat: 'Konut', items: ['Kira', 'Konut kredisi', 'Site aidatı', 'Temizlik'] },
     { cat: 'Sağlık & Spor', items: ['Spor salonu', 'Pilates', 'Yoga', 'Sağlık sigortası', 'Diş'] },
@@ -62,10 +62,16 @@
         </button>
         <div class="preset-chips" hidden>
           ${group.items.map(name =>
-            `<button type="button" class="chip" data-name="${escapeAttr(name)}">+ ${name}</button>`
+            `<button type="button" class="chip" data-name="${escapeAttr(name)}">${presetChipLabel(name)}</button>`
           ).join('')}
         </div>
       </div>`).join('');
+  }
+
+  function presetChipLabel(name) {
+    const plan = rootCatalogDefault(name);
+    const price = plan ? `<small>${formatTL(plan.amount)}</small>` : '';
+    return `<span>+ ${escapeHTML(name)}</span>${price}`;
   }
 
   function renderSetup() {
@@ -166,7 +172,7 @@
       if (file) await importData(file);
     });
 
-    document.getElementById('presets').addEventListener('click', (e) => {
+    document.getElementById('presets').addEventListener('click', async (e) => {
       const toggle = e.target.closest('.preset-toggle');
       if (toggle) {
         const chipsEl = toggle.nextElementSibling;
@@ -177,7 +183,7 @@
       }
       const chip = e.target.closest('.chip');
       if (!chip) return;
-      addPreset(fixedList, chip.dataset.name);
+      await addPreset(fixedList, chip.dataset.name);
     });
   }
 
@@ -237,16 +243,76 @@
   }
 
   // Sablon ekle: bos bir satir varsa onu doldur, yoksa yeni satir ekle; tutara odaklan.
-  function addPreset(container, name) {
+  async function addPreset(container, name) {
+    const choice = await chooseSubscriptionPlan(name);
+    if (choice === null) return;
+    const rowName = choice ? (choice.label === 'Aylik' ? name : `${name} - ${choice.label}`) : name;
+    const rowAmount = choice ? choice.amount : undefined;
+
     const rows = [...container.querySelectorAll('.fixed-row')];
     let row = rows.find(r =>
       r.querySelector('.fx-name').value.trim() === '' &&
       r.querySelector('.fx-amount').value.trim() === '');
-    if (row) row.querySelector('.fx-name').value = name;
-    else row = addFixedRow(container, name);
+    if (row) {
+      row.querySelector('.fx-name').value = rowName;
+      if (rowAmount > 0) row.querySelector('.fx-amount').value = tlFmt.format(rowAmount);
+    } else {
+      row = addFixedRow(container, rowName, rowAmount);
+    }
     const amt = row.querySelector('.fx-amount');
     amt.focus();
     row.scrollIntoView({ block: 'nearest' });
+  }
+
+  function rootCatalogDefault(name) {
+    if (!window.SubscriptionCatalog) return null;
+    return window.SubscriptionCatalog.defaultPlan(name);
+  }
+
+  function chooseSubscriptionPlan(name) {
+    if (!window.SubscriptionCatalog) return Promise.resolve(undefined);
+    const entry = window.SubscriptionCatalog.get(name);
+    if (!entry || !entry.plans || entry.plans.length === 0) return Promise.resolve(undefined);
+    if (entry.plans.length === 1) return Promise.resolve(entry.plans[0]);
+
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'plan-overlay';
+      overlay.innerHTML = `
+        <div class="plan-sheet" role="dialog" aria-modal="true" aria-label="${escapeAttr(name)} plan seçimi">
+          <div class="plan-head">
+            <strong>${escapeHTML(name)}</strong>
+            <button type="button" class="plan-close" aria-label="Kapat">×</button>
+          </div>
+          <p class="plan-hint">Öneri fiyatı seç; tutarı satırda yine değiştirebilirsin.</p>
+          <div class="plan-options">
+            ${entry.plans.map((plan, idx) => `
+              <button type="button" class="plan-option" data-idx="${idx}">
+                <span>${escapeHTML(plan.label)}</span>
+                <strong>${formatTL(plan.amount)}</strong>
+              </button>
+            `).join('')}
+          </div>
+          <small class="plan-source">Kaynak: ${escapeHTML(entry.source)} · ${entry.checkedAt}</small>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      function close(value) {
+        overlay.remove();
+        resolve(value);
+      }
+
+      overlay.addEventListener('click', e => {
+        if (e.target === overlay || e.target.closest('.plan-close')) {
+          close(null);
+          return;
+        }
+        const option = e.target.closest('.plan-option');
+        if (!option) return;
+        close(entry.plans[Number(option.dataset.idx)]);
+      });
+    });
   }
 
   function addFixedRow(container, name, amount) {
@@ -507,6 +573,14 @@
 
   function escapeAttr(str) {
     return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  }
+
+  function escapeHTML(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   function todayStr() {

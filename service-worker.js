@@ -1,4 +1,4 @@
-const CACHE = 'gunluk-harcama-v4';
+const CACHE = 'gunluk-harcama-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
   './js/payroll.js',
   './js/budget.js',
   './js/db.js',
+  './js/subscriptions.js',
   './js/app.js',
   './icons/icon-192.png',
   './icons/icon-512.png',

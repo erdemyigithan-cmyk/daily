@@ -826,13 +826,11 @@ body.has-tabbar #app { padding-bottom: 84px; }
 .taksit-btn { width: 100%; margin-top: 8px; }
 .inst-sheet { padding: 4px 20px 8px; display: flex; flex-direction: column; gap: 10px; }
 .inst-sheet strong { font-size: 16px; }
-.inst-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.inst-option {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-  background: var(--surface-2); border: none; color: var(--text);
-  padding: 12px 14px; border-radius: var(--radius); cursor: pointer; text-align: left;
+.inst-quick { display: flex; gap: 8px; }
+.inst-chip {
+  flex: 1; background: var(--surface-2); border: none; color: var(--text);
+  font-size: 15px; font-weight: 600; padding: 10px 0; border-radius: var(--radius); cursor: pointer;
 }
-.inst-option strong { color: var(--accent); font-size: 14px; }
-.inst-option:active { background: var(--accent); color: #06120c; }
-.inst-option:active strong { color: #06120c; }
+.inst-chip:active { background: var(--accent); color: #06120c; }
+.inst-preview { color: var(--accent); font-size: 14px; font-weight: 600; min-height: 18px; }
 .balance.instcard span:first-child { color: var(--text); }

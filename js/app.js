@@ -616,7 +616,6 @@
   }
 
   // ---------- Ana ekran ----------
-  const QUICK_AMOUNTS = [50, 100, 250, 500];
   let draft = 0; // numpad taslagi (tam sayi TL)
   let selectedDate = todayStr();
   let entrySource = 'cash'; // harcama kaynagi: 'cash' | 'meal'
@@ -781,9 +780,6 @@
       </section>` : ''}
 
       <section class="entry">
-        <div class="quick">
-          ${QUICK_AMOUNTS.map(a => `<button class="quick-btn" data-amt="${a}">+${a}</button>`).join('')}
-        </div>
         <div class="draft" id="draft">0 TL</div>
         ${meal ? `
         <div class="src-switch" id="srcSwitch">
@@ -842,9 +838,6 @@
       entrySource = btn.dataset.src;
       srcSwitch.querySelectorAll('.src').forEach(s => s.classList.toggle('active', s === btn));
     });
-
-    app.querySelectorAll('.quick-btn').forEach(b =>
-      b.addEventListener('click', () => addExpenseAndRefresh(Number(b.dataset.amt), '', dateToTs(selectedDate), entrySource)));
 
     app.querySelectorAll('.np[data-d]').forEach(b =>
       b.addEventListener('click', () => { draft = draft * 10 + Number(b.dataset.d); updateDraft(); }));
@@ -967,7 +960,7 @@
   // Taksit secim sheet'i. Secilen taksit sayisini (n) ya da null (iptal) doner.
   function chooseInstallments(total) {
     return new Promise((resolve) => {
-      const counts = [2, 3, 4, 6, 9, 12];
+      const quick = [3, 6, 9, 12];
       const overlay = document.createElement('div');
       overlay.className = 'sheet-overlay';
       overlay.innerHTML = `
@@ -976,22 +969,37 @@
           <div class="inst-sheet">
             <strong>${formatTL(total)} — kaç aya bölelim?</strong>
             <p class="plan-hint">Taksitli: bu ay bütçenden sadece aylık tutar düşer, kalanı sonraki aylara yayılır. Tek seferlik istersen iptal et, "Ekle"yi kullan.</p>
-            <div class="inst-options">
-              ${counts.map(n => `
-                <button type="button" class="inst-option" data-n="${n}">
-                  <span>${n} ay</span><strong>aylık ${formatTL(Math.round(total / n))}</strong>
-                </button>`).join('')}
+            <div class="inst-quick">
+              ${quick.map(n => `<button type="button" class="inst-chip" data-n="${n}">${n}</button>`).join('')}
             </div>
-            <button type="button" class="edit-cancel" id="instCancel">İptal</button>
+            <input id="instCount" type="number" inputmode="numeric" min="2" max="36" placeholder="Taksit sayısı (ör. 5)">
+            <p class="inst-preview" id="instPreview">&nbsp;</p>
+            <div class="edit-btns">
+              <button type="button" class="edit-save" id="instOk">Uygula</button>
+              <button type="button" class="edit-cancel" id="instCancel">İptal</button>
+            </div>
           </div>
         </div>`;
       document.body.appendChild(overlay);
       const close = (v) => { overlay.remove(); resolve(v); };
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay || e.target.closest('#instCancel')) { close(null); return; }
-        const opt = e.target.closest('.inst-option');
-        if (opt) close(Number(opt.dataset.n));
+      const input = overlay.querySelector('#instCount');
+      const preview = overlay.querySelector('#instPreview');
+      const update = () => {
+        const n = parseInt(input.value, 10);
+        preview.textContent = (n >= 2) ? `${n} ay · aylık ${formatTL(Math.round(total / n))}` : ' ';
+      };
+      input.addEventListener('input', update);
+      overlay.querySelectorAll('.inst-chip').forEach(c =>
+        c.addEventListener('click', () => { input.value = c.dataset.n; update(); }));
+      overlay.querySelector('#instOk').addEventListener('click', () => {
+        const n = parseInt(input.value, 10);
+        if (!(n >= 2)) { alert('En az 2 taksit girin.'); return; }
+        close(Math.min(n, 36));
       });
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.closest('#instCancel')) close(null);
+      });
+      input.focus();
     });
   }
 

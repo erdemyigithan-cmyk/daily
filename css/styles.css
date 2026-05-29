@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --bg: #10211c;
   --surface: #18241f;
   --surface-2: #1f2e27;
@@ -64,6 +65,29 @@ body {
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span { font-size: 14px; color: var(--muted); font-weight: 600; }
 .hint { font-size: 12px; color: var(--muted); }
+.income-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius);
+  padding: 5px;
+}
+.income-mode {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 11px;
+  cursor: pointer;
+}
+.income-mode.active {
+  background: var(--accent);
+  color: #06120c;
+}
 input, select {
   background: var(--surface);
   border: 1px solid var(--surface-2);
@@ -213,7 +237,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   color: var(--text);
 }
 
-.note-input {
+.note-input, .date-input {
   font-size: 15px;
   padding: 10px 14px;
   margin-bottom: 8px;
@@ -223,7 +247,8 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   color: var(--text);
   width: 100%;
 }
-.note-input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+.note-input:focus, .date-input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+.import-label { display: block; text-align: center; cursor: pointer; }
 
 .numpad {
   display: grid;

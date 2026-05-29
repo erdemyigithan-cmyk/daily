@@ -71,14 +71,22 @@
   function renderSetup() {
     const s = state.settings || {};
     const fixed = state.fixed.length ? state.fixed : [];
+    const incomeMode = s.incomeMode === 'gross' ? 'gross' : 'net';
+    const incomeValue = incomeMode === 'gross' ? s.grossIncome : s.income;
 
     app.innerHTML = `
       <header class="head"><h1>Kurulum</h1></header>
       <form id="setupForm" class="form setup-form">
+        <div class="income-switch" aria-label="Gelir tipi">
+          <button type="button" class="income-mode ${incomeMode === 'net' ? 'active' : ''}" data-mode="net">Net</button>
+          <button type="button" class="income-mode ${incomeMode === 'gross' ? 'active' : ''}" data-mode="gross">Brüt</button>
+        </div>
+
         <label class="field">
-          <span>Aylık net gelir (TL)</span>
+          <span id="incomeLabel">Aylık net gelir (TL)</span>
           <input id="income" type="text" inputmode="numeric"
-                 value="${s.income > 0 ? tlFmt.format(s.income) : ''}" required>
+                 value="${incomeValue > 0 ? tlFmt.format(incomeValue) : ''}" required>
+          <small id="incomePreview" class="hint"></small>
         </label>
 
         <div class="field">
@@ -101,21 +109,42 @@
             <div id="presets">${buildPresetsHTML()}</div>
           </div>
         </div>
+
+        <div class="field">
+          <span>Veri</span>
+          <button type="button" id="exportBtn" class="btn-ghost">↓ Dışa aktar (JSON yedek)</button>
+          <label for="importFile" class="btn-ghost import-label">↑ İçe aktar (geri yükle)</label>
+          <input type="file" id="importFile" accept=".json" style="display:none">
+        </div>
       </form>
       <button type="submit" form="setupForm" class="btn-primary setup-save" id="saveBtn">Kaydet</button>
     `;
+
+    const setupForm = document.getElementById('setupForm');
+    setupForm.dataset.incomeMode = incomeMode;
 
     const fixedList = document.getElementById('fixedList');
     if (fixed.length === 0) addFixedRow(fixedList);
     else fixed.forEach(f => addFixedRow(fixedList, f.name, f.amount));
 
-    applyNumFmt(document.getElementById('income'));
+    const incomeInput = document.getElementById('income');
+    applyNumFmt(incomeInput);
     applyNumFmt(document.getElementById('savings'));
+    setIncomeMode(incomeMode);
+
+    document.querySelector('.income-switch').addEventListener('click', (e) => {
+      const btn = e.target.closest('.income-mode');
+      if (!btn) return;
+      setIncomeMode(btn.dataset.mode);
+    });
+
+    incomeInput.addEventListener('input', updateIncomePreview);
+    incomeInput.addEventListener('blur', updateIncomePreview);
 
     document.querySelector('.pct-chips').addEventListener('click', (e) => {
       const chip = e.target.closest('.pct-chip');
       if (!chip) return;
-      const income = parseAmount(document.getElementById('income').value);
+      const income = incomeForSavingsPercent();
       if (!income) { alert('Önce aylık geliri girin.'); return; }
       const savings = Math.round(income * Number(chip.dataset.pct) / 100);
       const input = document.getElementById('savings');
@@ -129,7 +158,13 @@
       const row = addFixedRow(fixedList);
       row.querySelector('.fx-name').focus();
     });
-    document.getElementById('setupForm').addEventListener('submit', onSaveSetup);
+    setupForm.addEventListener('submit', onSaveSetup);
+
+    document.getElementById('exportBtn').addEventListener('click', exportData);
+    document.getElementById('importFile').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) await importData(file);
+    });
 
     document.getElementById('presets').addEventListener('click', (e) => {
       const toggle = e.target.closest('.preset-toggle');
@@ -144,6 +179,61 @@
       if (!chip) return;
       addPreset(fixedList, chip.dataset.name);
     });
+  }
+
+  function incomeForSavingsPercent() {
+    const incomeInput = document.getElementById('income');
+    const amount = parseAmount(incomeInput.value);
+    if (currentIncomeMode() !== 'gross' || !amount) return amount;
+    const now = new Date();
+    return Payroll.computeMonthlyNet({
+      gross: amount,
+      year: now.getFullYear(),
+      month: now.getMonth() + 1
+    }).net;
+  }
+
+  function currentIncomeMode() {
+    return document.getElementById('setupForm').dataset.incomeMode || 'net';
+  }
+
+  function setIncomeMode(mode) {
+    const selected = mode === 'gross' ? 'gross' : 'net';
+    const setupForm = document.getElementById('setupForm');
+    setupForm.dataset.incomeMode = selected;
+
+    document.querySelectorAll('.income-mode').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === selected);
+    });
+
+    document.getElementById('incomeLabel').textContent =
+      selected === 'gross' ? 'Aylık brüt gelir (TL)' : 'Aylık net gelir (TL)';
+    updateIncomePreview();
+  }
+
+  function updateIncomePreview() {
+    const preview = document.getElementById('incomePreview');
+    const incomeInput = document.getElementById('income');
+    if (!preview || !incomeInput) return;
+
+    if (currentIncomeMode() !== 'gross') {
+      preview.textContent = 'Bu tutar doğrudan aylık bütçeye gelir olarak kullanılır.';
+      return;
+    }
+
+    const gross = parseAmount(incomeInput.value);
+    if (!gross) {
+      preview.textContent = 'Brütte 2026 SGK, işsizlik, gelir vergisi ve damga vergisi tahmini uygulanır.';
+      return;
+    }
+
+    const now = new Date();
+    const p = Payroll.computeMonthlyNet({
+      gross,
+      year: now.getFullYear(),
+      month: now.getMonth() + 1
+    });
+    preview.textContent = `${now.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })} tahmini net: ${formatTL(p.net)}. Yıl başından beri aynı brüt varsayılır.`;
   }
 
   // Sablon ekle: bos bir satir varsa onu doldur, yoksa yeni satir ekle; tutara odaklan.
@@ -185,13 +275,29 @@
 
   async function onSaveSetup(e) {
     e.preventDefault();
-    const income = parseAmount(document.getElementById('income').value);
+    const incomeInput = parseAmount(document.getElementById('income').value);
+    const incomeMode = currentIncomeMode();
     const savingsTarget = parseAmount(document.getElementById('savings').value);
     const salaryDay = 1; // Dönem her zaman ayın 1'inde başlar
 
-    if (income <= 0) { alert('Lütfen geçerli bir gelir girin.'); return; }
+    if (incomeInput <= 0) { alert('Lütfen geçerli bir gelir girin.'); return; }
 
-    await DB.saveSettings({ income, savingsTarget, salaryDay });
+    let settingsPatch = { incomeMode, savingsTarget, salaryDay };
+    if (incomeMode === 'gross') {
+      const now = new Date();
+      const payroll = Payroll.computeMonthlyNet({
+        gross: incomeInput,
+        year: now.getFullYear(),
+        month: now.getMonth() + 1
+      });
+      settingsPatch.grossIncome = incomeInput;
+      settingsPatch.income = Math.round(payroll.net); // Eski kayitlarla uyumluluk ve yedek gosterim.
+    } else {
+      settingsPatch.income = incomeInput;
+      settingsPatch.grossIncome = 0;
+    }
+
+    await DB.saveSettings(settingsPatch);
     await DB.replaceFixedExpenses(readFixedRows());
     await loadAll();
     renderMain();
@@ -233,6 +339,7 @@
         </div>
         <div class="draft" id="draft">0 TL</div>
         <input id="noteInput" type="text" class="note-input" placeholder="Not (opsiyonel)" maxlength="60" autocomplete="off">
+        <input id="dateInput" type="date" class="date-input">
         <div class="numpad">
           ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="np" data-d="${n}">${n}</button>`).join('')}
           <button class="np np-back" id="back" aria-label="Sil">⌫</button>
@@ -262,11 +369,16 @@
     app.querySelectorAll('.np[data-d]').forEach(b =>
       b.addEventListener('click', () => { draft = draft * 10 + Number(b.dataset.d); updateDraft(); }));
 
+    const dateInput = document.getElementById('dateInput');
+    dateInput.value = todayStr();
+    dateInput.max = todayStr();
+
     document.getElementById('back').addEventListener('click', () => { draft = Math.floor(draft / 10); updateDraft(); });
     document.getElementById('add').addEventListener('click', () => {
       if (draft > 0) {
         const note = document.getElementById('noteInput').value.trim();
-        addExpenseAndRefresh(draft, note);
+        const ts = dateToTs(document.getElementById('dateInput').value);
+        addExpenseAndRefresh(draft, note, ts);
       }
     });
 
@@ -282,10 +394,12 @@
   }
 
   function renderEditRow(rowEl, e) {
+    const origDateStr = tsToDateStr(e.ts);
     rowEl.classList.add('editing');
     rowEl.innerHTML = `
       <input class="edit-amt" type="text" inputmode="numeric" value="${tlFmt.format(e.amount)}">
       <input class="edit-note" type="text" placeholder="Not (opsiyonel)" maxlength="60" value="${escapeAttr(e.note || '')}">
+      <input class="edit-date" type="date" value="${origDateStr}" max="${todayStr()}">
       <div class="edit-btns">
         <button class="edit-save">Kaydet</button>
         <button class="edit-cancel">İptal</button>
@@ -297,8 +411,10 @@
     rowEl.querySelector('.edit-save').addEventListener('click', async () => {
       const newAmount = parseAmount(rowEl.querySelector('.edit-amt').value);
       const newNote = rowEl.querySelector('.edit-note').value.trim();
+      const newDateStr = rowEl.querySelector('.edit-date').value;
       if (newAmount <= 0) { alert('Geçerli bir tutar girin.'); return; }
-      await DB.updateExpense(e.id, newAmount, newNote);
+      const newTs = newDateStr !== origDateStr ? dateToTs(newDateStr) : null;
+      await DB.updateExpense(e.id, newAmount, newNote, newTs);
       state.expenses = await DB.getExpenses();
       renderMain();
     });
@@ -312,8 +428,8 @@
     if (el) el.textContent = formatTL(draft);
   }
 
-  async function addExpenseAndRefresh(amount, note) {
-    await DB.addExpense(amount, note);
+  async function addExpenseAndRefresh(amount, note, ts) {
+    await DB.addExpense(amount, note, ts);
     state.expenses = await DB.getExpenses();
     renderMain();
   }
@@ -335,8 +451,53 @@
     return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   }
 
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function tsToDateStr(ts) {
+    const d = new Date(ts);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  // Bugun -> simdi; gecmis gun -> o gunun oglen 12:00'si (liste gorunumu icin)
+  function dateToTs(dateStr) {
+    if (!dateStr || dateStr === todayStr()) return new Date().toISOString();
+    return new Date(dateStr + 'T12:00:00').toISOString();
+  }
+
+  // ---------- JSON yedek ----------
+  async function exportData() {
+    const [settings, fixed, expenses] = await Promise.all([
+      DB.getSettings(), DB.getFixedExpenses(), DB.getExpenses()
+    ]);
+    const json = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), settings, fixed, expenses }, null, 2);
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(new Blob([json], { type: 'application/json' })),
+      download: 'gunluk-harcama-' + todayStr() + '.json'
+    });
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function importData(file) {
+    let data;
+    try { data = JSON.parse(await file.text()); } catch { alert('Dosya okunamadı.'); return; }
+    if (!data.version || !data.settings) { alert('Geçersiz yedek dosyası.'); return; }
+    if (!confirm('Mevcut tüm veriler silinip yedekten geri yüklenecek. Devam edilsin mi?')) return;
+    await DB.saveSettings(data.settings);
+    await DB.replaceFixedExpenses(data.fixed || []);
+    await DB.replaceExpenses(data.expenses || []);
+    await loadAll();
+    isConfigured() ? renderMain() : renderSetup();
+  }
+
   // ---------- Onyukleme ----------
   async function boot() {
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
     try {
       await loadAll();
       isConfigured() ? renderMain() : renderSetup();

@@ -718,3 +718,71 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   color: var(--muted); font-size: 12px;
   margin-top: 4px;
 }
+
+/* Alt tab bar */
+body.has-tabbar #app { padding-bottom: 84px; }
+.tabbar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 50;
+  display: flex;
+  width: 100%; max-width: 480px;
+  margin: 0 auto;
+  background: var(--surface);
+  border-top: 1px solid var(--surface-2);
+  padding: 6px 0 calc(env(safe-area-inset-bottom) + 6px);
+}
+.tab {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: transparent; border: none;
+  color: var(--muted);
+  font-size: 11px; font-weight: 600;
+  padding: 6px 0; cursor: pointer;
+}
+.tab-icon { font-size: 20px; filter: grayscale(1) opacity(0.7); }
+.tab.active { color: var(--accent); }
+.tab.active .tab-icon { filter: none; }
+
+/* Kumbara ekrani */
+.piggy { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.piggy-wrap { margin: 18px 0 8px; }
+.jar {
+  position: relative;
+  width: 130px; height: 180px;
+  border: 3px solid var(--surface-2);
+  border-radius: 16px 16px 22px 22px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.jar-fill {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(180deg, #34d36b, var(--accent));
+  transition: height 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.jar-pct {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; font-weight: 800;
+  color: var(--text);
+  mix-blend-mode: difference;
+}
+.piggy-wrap.overflow .jar { box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 45%, transparent); }
+.piggy-main { font-size: 17px; margin-top: 6px; }
+.piggy-main strong { color: var(--accent); }
+.piggy-over { color: var(--accent); font-size: 14px; font-weight: 600; margin-top: 4px; }
+.piggy-today { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.piggy-cumulative { color: var(--muted); font-size: 13px; margin-top: 14px; }
+.piggy-wrap.behind .jar-fill { background: var(--surface-2); }
+
+.piggy-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  margin-top: 60px; color: var(--muted);
+}
+.piggy-empty-icon { font-size: 56px; }
+.piggy-empty p { font-size: 15px; max-width: 280px; }
+.piggy-empty .btn-primary { margin-top: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .jar-fill { transition: none; }
+}

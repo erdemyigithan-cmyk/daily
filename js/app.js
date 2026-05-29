@@ -96,6 +96,7 @@
   }
 
   function renderSetup() {
+    document.body.classList.remove('has-tabbar'); // kurulum tam ekran, alt bar yok
     const s = state.settings || {};
     const fixed = state.fixed.length ? state.fixed : [];
     const incomes = Budget.normalizeIncomes(s);
@@ -617,6 +618,32 @@
     return `<p class="${cls}">${text} ${best}</p>`;
   }
 
+  // ---------- Alt tab bar ----------
+  const TABS = [
+    { key: 'today', icon: '🧮', label: 'Bugün' },
+    { key: 'stats', icon: '📊', label: 'İstatistik' },
+    { key: 'piggy', icon: '🫙', label: 'Kumbara' }
+  ];
+  function tabBarHtml(active) {
+    return `<nav class="tabbar">${TABS.map(t =>
+      `<button type="button" class="tab ${t.key === active ? 'active' : ''}" data-tab="${t.key}">
+        <span class="tab-icon">${t.icon}</span><span class="tab-label">${t.label}</span>
+      </button>`).join('')}</nav>`;
+  }
+  function wireTabBar() {
+    document.body.classList.add('has-tabbar');
+    const bar = app.querySelector('.tabbar');
+    if (!bar) return;
+    bar.addEventListener('click', (e) => {
+      const btn = e.target.closest('.tab');
+      if (!btn) return;
+      const tab = btn.dataset.tab;
+      if (tab === 'today') renderMain(todayStr());
+      else if (tab === 'stats') renderStats();
+      else if (tab === 'piggy') renderKumbara();
+    });
+  }
+
   function renderMain(dateStr) {
     draft = 0;
     selectedDate = clampViewDate(dateStr || selectedDate);
@@ -635,10 +662,7 @@
     app.innerHTML = `
       <header class="head">
         <h1>${viewingToday ? 'Bugün' : 'Geçmiş'}</h1>
-        <div class="head-actions">
-          <button id="statsBtn" class="icon-btn" aria-label="İstatistikler">📊</button>
-          <button id="settingsBtn" class="icon-btn" aria-label="Menü">⚙</button>
-        </div>
+        <button id="settingsBtn" class="icon-btn" aria-label="Menü">⚙</button>
       </header>
 
       <section class="day-nav">
@@ -691,6 +715,8 @@
               <button class="exp-del" data-id="${e.id}" aria-label="Sil">×</button>
             </div>`).join('')}
       </section>
+
+      ${tabBarHtml('today')}
     `;
 
     if (viewingToday) {
@@ -704,7 +730,7 @@
     }
 
     document.getElementById('settingsBtn').addEventListener('click', openSettingsSheet);
-    document.getElementById('statsBtn').addEventListener('click', renderStats);
+    wireTabBar();
     document.getElementById('prevDay').addEventListener('click', () => renderMain(addDays(selectedDate, -1)));
     document.getElementById('nextDay').addEventListener('click', () => renderMain(addDays(selectedDate, 1)));
     document.getElementById('viewDateInput').addEventListener('change', (e) => renderMain(e.target.value));
@@ -928,11 +954,7 @@
     }
 
     app.innerHTML = `
-      <header class="head">
-        <button id="backBtn" class="icon-btn" aria-label="Geri">‹</button>
-        <h1>İstatistikler</h1>
-        <span class="head-spacer"></span>
-      </header>
+      <header class="head"><h1>İstatistikler</h1></header>
 
       <div class="stat-periods">
         ${STAT_PERIODS.map(p =>
@@ -977,15 +999,75 @@
               <span>${shortDate(sum.series[sum.series.length - 1].date)}</span>
             </div>`}
       </section>
+
+      ${tabBarHtml('stats')}
     `;
 
-    document.getElementById('backBtn').addEventListener('click', () => renderMain());
     document.querySelector('.stat-periods').addEventListener('click', (e) => {
       const btn = e.target.closest('.stat-period');
       if (!btn) return;
       statsPeriod = btn.dataset.key;
       renderStats();
     });
+    wireTabBar();
+  }
+
+  // ---------- Kumbara ekrani ----------
+  function renderKumbara() {
+    const r = Budget.computeBudget(state.settings, state.fixed, state.expenses, new Date());
+    const savingsTarget = Number(state.settings.savingsTarget) || 0;
+    const spentToday = expensesForDay(todayStr()).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const sv = Savings.compute({
+      periodVariableBudget: r.periodVariableBudget,
+      savingsTarget,
+      daysInPeriod: r.daysInPeriod,
+      daysAccrued: r.daysAccrued,
+      spentThisPeriod: r.spentThisPeriod,
+      spentToday
+    });
+
+    let body;
+    if (!sv) {
+      body = `
+        <div class="piggy-empty">
+          <div class="piggy-empty-icon">🫙</div>
+          <p>Tasarruf hedefi belirlersen burada kumbaran dolmaya başlar.</p>
+          <button type="button" id="piggySetup" class="btn-primary">Kurulumu düzenle</button>
+        </div>`;
+    } else {
+      const fillPct = Math.max(0, Math.min(1, sv.pct)) * 100;
+      const overPct = sv.overflow ? Math.round((sv.pct - 1) * 100) : 0;
+      body = `
+        <div class="piggy-wrap ${sv.overflow ? 'overflow' : ''} ${sv.saved < 0 ? 'behind' : ''}">
+          <div class="jar">
+            <div class="jar-fill" id="jarFill" style="height:0%"></div>
+            <div class="jar-pct">${Math.round(sv.pct * 100)}%</div>
+          </div>
+        </div>
+        <p class="piggy-main">Bu ay biriken: <strong>${formatTL(sv.saved)}</strong> / ${formatTL(sv.target)}</p>
+        ${sv.overflow ? `<p class="piggy-over">✨ Hedefin %${overPct} üstündesin</p>` : ''}
+        ${sv.todayContrib > 0 ? `<p class="piggy-today">bugün +${formatTL(sv.todayContrib)}</p>` : ''}
+        <p class="piggy-cumulative">Kümülatif bakiye: ${r.cumulativeBalance >= 0 ? '+' : ''}${formatTL(r.cumulativeBalance)}</p>`;
+    }
+
+    app.innerHTML = `
+      <header class="head"><h1>Kumbara</h1></header>
+      <section class="piggy">${body}</section>
+      ${tabBarHtml('piggy')}
+    `;
+
+    const setupBtn = document.getElementById('piggySetup');
+    if (setupBtn) setupBtn.addEventListener('click', renderSetup);
+
+    // Kavanoz dolum animasyonu (reduced-motion'da aninda)
+    const fill = document.getElementById('jarFill');
+    if (fill && sv) {
+      const target = Math.max(0, Math.min(1, sv.pct)) * 100;
+      const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduce) { fill.style.height = target + '%'; }
+      else { requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.height = target + '%'; })); }
+    }
+    wireTabBar();
   }
 
   // ---------- Ayarlar sheet ----------

@@ -92,11 +92,12 @@
     return tx('expenses', 'readonly', s => reqToPromise(s.getAll()));
   }
 
-  function addExpense(amount, note, ts, source, inst) {
+  function addExpense(amount, note, ts, source, inst, cat) {
     const rec = { amount: Number(amount), ts: ts || new Date().toISOString() };
     if (note) rec.note = String(note).trim();
     if (source === 'meal') rec.source = 'meal'; // varsayilan 'cash' (alan yok)
     if (inst) rec.inst = inst; // { id, k, n } taksit metadata
+    if (cat) rec.cat = cat;    // opsiyonel kategori anahtari
     return tx('expenses', 'readwrite', s => reqToPromise(s.add(rec)));
   }
 
@@ -113,7 +114,7 @@
       });
   }
 
-  function updateExpense(id, amount, note, ts) {
+  function updateExpense(id, amount, note, ts, cat) {
     return tx('expenses', 'readonly', s => reqToPromise(s.get(id)))
       .then(rec => {
         if (!rec) return;
@@ -121,6 +122,8 @@
         if (note && String(note).trim()) rec.note = String(note).trim();
         else delete rec.note;
         if (ts) rec.ts = ts;
+        if (cat) rec.cat = cat;
+        else if (cat === '') delete rec.cat;
         return tx('expenses', 'readwrite', s => reqToPromise(s.put(rec)));
       });
   }
@@ -133,6 +136,7 @@
         if (item.note) rec.note = String(item.note);
         if (item.source === 'meal') rec.source = 'meal';
         if (item.inst) rec.inst = item.inst;
+        if (item.cat) rec.cat = item.cat;
         s.add(rec);
       }
     });

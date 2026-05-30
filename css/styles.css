@@ -776,6 +776,33 @@ body.has-tabbar #app { padding-bottom: 88px; }
 }
 .switch input:checked ~ .switch-track { background: var(--accent); border-color: var(--accent); }
 .switch input:checked ~ .switch-thumb { transform: translateX(18px); background: var(--ink); }
+
+/* Kategori chip'leri (giriş + düzenleme) */
+.cat-chips {
+  display: flex; gap: 6px; overflow-x: auto;
+  padding: 2px 0 8px; margin-bottom: 4px;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.cat-chips::-webkit-scrollbar { display: none; }
+.cat-chip {
+  flex: none; background: var(--surface-2); border: none; color: var(--text);
+  font-size: 13px; padding: 8px 12px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+}
+.cat-chip.active { background: var(--accent); color: var(--ink); font-weight: 600; }
+
+/* İstatistik: kategoriye göre dağılım */
+.cat-wrap { margin-top: 22px; }
+.cat-row {
+  position: relative; overflow: hidden;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 11px 14px; margin-bottom: 6px; border-radius: 12px; background: var(--surface);
+}
+.cat-row::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--p, 0%);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.cat-row-name, .cat-row-amt { position: relative; z-index: 1; font-size: 14px; }
+.cat-row-amt { font-weight: 700; }
 .src-switch {
   display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
   background: var(--surface-2); border-radius: 999px; padding: 4px; margin-bottom: 8px;

@@ -20,6 +20,30 @@
     return (arr || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
   }
 
+  // Opsiyonel harcama kategorileri (sabit set).
+  const CATEGORIES = [
+    { key: 'yeme', icon: '🍽️', label: 'Yeme-içme' },
+    { key: 'market', icon: '🛒', label: 'Market/Gıda' },
+    { key: 'ulasim', icon: '🚌', label: 'Ulaşım' },
+    { key: 'saglik', icon: '💊', label: 'Sağlık' },
+    { key: 'egitim', icon: '📚', label: 'Eğitim' },
+    { key: 'giyim', icon: '👕', label: 'Giyim' },
+    { key: 'eglence', icon: '🎬', label: 'Eğlence' },
+    { key: 'ev', icon: '🏠', label: 'Ev/Fatura' },
+    { key: 'kisisel', icon: '✨', label: 'Kişisel' },
+    { key: 'diger', icon: '⋯', label: 'Diğer' }
+  ];
+  const CAT_BY_KEY = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
+  function catIcon(key) { return CAT_BY_KEY[key] ? CAT_BY_KEY[key].icon : ''; }
+  function catLabel(key) { return CAT_BY_KEY[key] ? CAT_BY_KEY[key].label : ''; }
+
+  // Kategori chip satiri HTML'i (secili olan .active). selected null = kategorisiz.
+  function catChipsHtml(selected) {
+    return `<div class="cat-chips">${CATEGORIES.map(c =>
+      `<button type="button" class="cat-chip ${c.key === selected ? 'active' : ''}" data-cat="${c.key}">${c.icon} ${c.label}</button>`
+    ).join('')}</div>`;
+  }
+
   // Input alanlari icin: tum tirnak/bosluk/noktalama kaldir, tamsayi dondur.
   function parseAmount(s) {
     return parseInt(String(s).replace(/\D/g, ''), 10) || 0;
@@ -633,6 +657,7 @@
   let draft = 0; // numpad taslagi (tam sayi TL)
   let selectedDate = todayStr();
   let entrySource = 'cash'; // harcama kaynagi: 'cash' | 'meal'
+  let entryCat = null; // secili kategori anahtari (opsiyonel)
 
   // Hero sayisi count-up. Onceki degerden hedefe; prefers-reduced-motion'da aninda.
   let lastHeroValue = null;
@@ -732,6 +757,7 @@
 
   function renderMain(dateStr) {
     draft = 0;
+    entryCat = null; // her render'da kategori secimini sifirla
     selectedDate = clampViewDate(dateStr || selectedDate);
     const viewingToday = selectedDate === todayStr();
     // Yemek karti harcamalari nakit butcesine karismaz: budget'a yalniz cash verilir.
@@ -805,6 +831,7 @@
           <button type="button" class="src ${entrySource === 'cash' ? 'active' : ''}" data-src="cash">Nakit</button>
           <button type="button" class="src ${entrySource === 'meal' ? 'active' : ''}" data-src="meal">🍽️ Yemek kartı</button>
         </div>` : ''}
+        ${catChipsHtml(entryCat)}
         <input id="noteInput" type="text" class="note-input" placeholder="Not (opsiyonel)" maxlength="60" autocomplete="off">
         <p class="entry-date">${formatDateLong(selectedDate)} için eklenir</p>
         <div class="numpad">
@@ -824,7 +851,7 @@
           : dayExpenses.map(e => `
             <div class="exp-row ${e.source === 'meal' ? 'meal' : ''}" data-id="${e.id}">
               <span class="exp-amt">${Number(e.amount) === 0 ? '<span class="exp-zero">Harcama yok</span>' : formatTL(e.amount)}${e.source === 'meal' ? ' <span class="exp-badge">🍽️</span>' : ''}${e.inst ? ' <span class="exp-badge">📅</span>' : ''}</span>
-              <span class="exp-meta">${e.note ? `<span class="exp-note">${escapeAttr(e.note)}</span>` : ''}<span class="exp-time">${formatWhen(e.ts)}</span></span>
+              <span class="exp-meta">${e.cat ? `<span class="exp-note">${catIcon(e.cat)} ${catLabel(e.cat)}</span>` : ''}${e.note ? `<span class="exp-note">${escapeAttr(e.note)}</span>` : ''}<span class="exp-time">${formatWhen(e.ts)}</span></span>
               <button class="exp-del" data-id="${e.id}" aria-label="Sil">×</button>
             </div>`).join('')}
       </section>
@@ -860,6 +887,14 @@
       srcSwitch.querySelectorAll('.src').forEach(s => s.classList.toggle('active', s === btn));
     });
 
+    const catChips = app.querySelector('.entry .cat-chips');
+    if (catChips) catChips.addEventListener('click', (e) => {
+      const btn = e.target.closest('.cat-chip');
+      if (!btn) return;
+      entryCat = (entryCat === btn.dataset.cat) ? null : btn.dataset.cat; // tekrar dokun = kaldir
+      catChips.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === entryCat));
+    });
+
     app.querySelectorAll('.np[data-d]').forEach(b =>
       b.addEventListener('click', () => { draft = draft * 10 + Number(b.dataset.d); updateDraft(); }));
 
@@ -868,7 +903,7 @@
       if (draft > 0) {
         const note = document.getElementById('noteInput').value.trim();
         const ts = dateToTs(selectedDate);
-        addExpenseAndRefresh(draft, note, ts, entrySource);
+        addExpenseAndRefresh(draft, note, ts, entrySource, entryCat);
       }
     });
 
@@ -904,10 +939,12 @@
 
   function renderEditRow(rowEl, e) {
     const origDateStr = tsToDateStr(e.ts);
+    let editCat = e.cat || null;
     rowEl.classList.add('editing');
     rowEl.innerHTML = `
       <input class="edit-amt" type="text" inputmode="numeric" value="${tlFmt.format(e.amount)}">
       <input class="edit-note" type="text" placeholder="Not (opsiyonel)" maxlength="60" value="${escapeAttr(e.note || '')}">
+      ${catChipsHtml(editCat)}
       <input class="edit-date" type="date" value="${origDateStr}" max="${todayStr()}">
       <div class="edit-btns">
         <button class="edit-save">Kaydet</button>
@@ -917,13 +954,20 @@
     applyNumFmt(rowEl.querySelector('.edit-amt'));
     rowEl.querySelector('.edit-amt').focus();
 
+    rowEl.querySelector('.cat-chips').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('.cat-chip');
+      if (!btn) return;
+      editCat = (editCat === btn.dataset.cat) ? null : btn.dataset.cat;
+      rowEl.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === editCat));
+    });
+
     rowEl.querySelector('.edit-save').addEventListener('click', async () => {
       const newAmount = parseAmount(rowEl.querySelector('.edit-amt').value);
       const newNote = rowEl.querySelector('.edit-note').value.trim();
       const newDateStr = rowEl.querySelector('.edit-date').value;
       if (newAmount <= 0) { alert('Geçerli bir tutar girin.'); return; }
       const newTs = newDateStr !== origDateStr ? dateToTs(newDateStr) : null;
-      await DB.updateExpense(e.id, newAmount, newNote, newTs);
+      await DB.updateExpense(e.id, newAmount, newNote, newTs, editCat || '');
       state.expenses = await DB.getExpenses();
       renderMain(newDateStr || selectedDate);
     });
@@ -937,8 +981,8 @@
     if (el) el.innerHTML = amtHtml(draft);
   }
 
-  async function addExpenseAndRefresh(amount, note, ts, source) {
-    await DB.addExpense(amount, note, ts, source);
+  async function addExpenseAndRefresh(amount, note, ts, source, cat) {
+    await DB.addExpense(amount, note, ts, source, null, cat);
     state.expenses = await DB.getExpenses();
     renderMain(selectedDate);
   }
@@ -1282,6 +1326,24 @@
     const maxTotal = sum.series.reduce((m, d) => Math.max(m, d.total), 0);
     const manyBars = sum.series.length > 14;
 
+    // Kategoriye gore dagilim (nakit, donem ici); kategorisiz ayri satir.
+    const catMap = new Map();
+    for (const e of cash) {
+      const t = new Date(e.ts);
+      if (t < r.from || t >= r.to) continue;
+      const k = e.cat || '__none__';
+      catMap.set(k, (catMap.get(k) || 0) + (Number(e.amount) || 0));
+    }
+    const catList = [...catMap.entries()]
+      .map(([k, total]) => ({
+        total,
+        label: k === '__none__' ? 'Kategorisiz' : catLabel(k),
+        icon: k === '__none__' ? '·' : catIcon(k)
+      }))
+      .filter(c => c.total > 0)
+      .sort((a, b) => b.total - a.total);
+    const catMax = catList.length ? catList[0].total : 0;
+
     // Karsilastirma metni
     let cmpHtml = '';
     if (cmp.pct === null) {
@@ -1342,6 +1404,17 @@
               <span>${shortDate(sum.series[0].date)}</span>
               <span>${shortDate(sum.series[sum.series.length - 1].date)}</span>
             </div>`}
+      </section>
+
+      <section class="cat-wrap">
+        <h2 class="list-title">Kategoriye göre</h2>
+        ${catList.length === 0
+          ? '<p class="empty">Bu dönemde kategori verisi yok.</p>'
+          : catList.map(c => `
+            <div class="cat-row" style="--p:${catMax ? Math.round(c.total / catMax * 100) : 0}%">
+              <span class="cat-row-name">${c.icon} ${c.label}</span>
+              <span class="cat-row-amt">${formatTL(c.total)}</span>
+            </div>`).join('')}
       </section>
 
       ${tabBarHtml('stats')}
@@ -1453,12 +1526,12 @@
       const s = String(v == null ? '' : v);
       return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
-    const rows = [['Tarih', 'Saat', 'Tutar (TL)', 'Not']];
+    const rows = [['Tarih', 'Saat', 'Tutar (TL)', 'Kategori', 'Not']];
     for (const e of expenses) {
       const d = new Date(e.ts);
       const tarih = String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear();
       const saat = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-      rows.push([tarih, saat, Math.round(Number(e.amount) || 0), e.note || '']);
+      rows.push([tarih, saat, Math.round(Number(e.amount) || 0), catLabel(e.cat), e.note || '']);
     }
     // UTF-8 BOM: Excel'de Turkce karakterler dogru gorunsun
     const csv = '﻿' + rows.map(r => r.map(cell).join(sep)).join('\r\n');
